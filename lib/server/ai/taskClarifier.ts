@@ -97,6 +97,13 @@ export async function clarifyTask(
     }
 
     if (error instanceof DeepSeekRequestError) {
+      if (error.status === 401 || error.status === 403) {
+        throw new TaskClarifierError(
+          "request_failed",
+          "AI Key 已配置，但 DeepSeek 拒绝了请求。请确认这是有效的 DeepSeek 官方 API Key，且没有失效。",
+        );
+      }
+
       throw new TaskClarifierError(
         "request_failed",
         "AI 请求失败，请检查网络、API Key 或模型配置。",

@@ -25,9 +25,12 @@ export class MissingDeepSeekApiKeyError extends Error {
 }
 
 export class DeepSeekRequestError extends Error {
-  constructor(message: string) {
+  status?: number;
+
+  constructor(message: string, status?: number) {
     super(message);
     this.name = "DeepSeekRequestError";
+    this.status = status;
   }
 }
 
@@ -36,7 +39,8 @@ export async function createDeepSeekChatCompletion({
   temperature = 0.2,
   maxTokens = 1200,
 }: DeepSeekChatCompletionOptions) {
-  const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
+  const apiKey =
+    process.env.DEEPSEEK_API_KEY?.trim() || process.env.PSOS_AI_API_KEY?.trim();
 
   if (!apiKey) {
     throw new MissingDeepSeekApiKeyError();
@@ -61,6 +65,7 @@ export async function createDeepSeekChatCompletion({
   if (!response.ok) {
     throw new DeepSeekRequestError(
       `DeepSeek request failed with ${response.status}`,
+      response.status,
     );
   }
 

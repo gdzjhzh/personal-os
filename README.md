@@ -40,8 +40,9 @@ OBSIDIAN_VAULT_PATH=/mnt/c/Users/YOUR_NAME/Documents/ObsidianVault
 APP_TIMEZONE=Asia/Shanghai
 DEEPSEEK_API_KEY=your_deepseek_api_key
 DEEPSEEK_MODEL=deepseek-v4-pro
+PSOS_AI_API_KEY=your_deepseek_api_key
 ```
 
 If `OBSIDIAN_VAULT_PATH` is unset, Markdown export writes to `exports/YYYY-MM-DD.md`.
 
-`DEEPSEEK_API_KEY` is only needed for the AI 澄清任务 section. Without it, the app still runs and shows a Chinese configuration error when AI clarification is used.
+`DEEPSEEK_API_KEY` is only needed for the 任务梳理 section. `PSOS_AI_API_KEY` is supported as a local alias. Without a valid key, the app still runs and shows a Chinese configuration error when AI clarification is used.
