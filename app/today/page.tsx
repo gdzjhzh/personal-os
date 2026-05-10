@@ -1,5 +1,4 @@
 import { revalidatePath } from "next/cache";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { AiTaskClarifier } from "@/components/ai-task-clarifier";
@@ -471,12 +470,12 @@ function ProductTeardownSummary({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge>今日进度：{progress}/3</Badge>
-          <Link
-            className="border border-emerald-700 px-3 py-1.5 text-sm font-semibold text-emerald-300 hover:bg-emerald-500 hover:text-black"
+          <a
+            className="inline-flex min-h-10 items-center border border-emerald-700 px-3 py-2 text-sm font-semibold text-emerald-300 hover:bg-emerald-500 hover:text-black"
             href="/today/product-teardowns"
           >
             打开拆解页
-          </Link>
+          </a>
         </div>
       </div>
 
