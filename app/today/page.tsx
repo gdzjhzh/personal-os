@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { AiTaskClarifier } from "@/components/ai-task-clarifier";
@@ -12,7 +13,6 @@ import {
 } from "@/lib/server/scoring";
 import {
   TASK_STATUSES,
-  createProductTeardown,
   createReview,
   createTask,
   exportDailyMarkdown,
@@ -22,7 +22,6 @@ import {
 import type {
   CodexFit,
   ProductTeardown,
-  ProductTeardownSource,
   Task,
   TaskPriority,
   TaskStatus,
@@ -41,12 +40,6 @@ type TodayPageProps = {
 
 const priorities: TaskPriority[] = ["P0", "P1", "P2"];
 const codexFits: CodexFit[] = ["high", "medium", "low", "none"];
-const productTeardownSources: ProductTeardownSource[] = [
-  "TrustMRR",
-  "Toolify",
-  "TAAFT",
-  "Other",
-];
 
 const statusLabels: Record<TaskStatus, string> = {
   inbox: "收件箱",
@@ -208,7 +201,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
           />
         </div>
 
-        <ProductTeardownSection date={today} productTeardowns={todayTeardowns} />
+        <ProductTeardownSummary productTeardowns={todayTeardowns} />
 
         <AiTaskClarifier />
 
@@ -454,188 +447,54 @@ function QueueSection({
   );
 }
 
-function ProductTeardownSection({
-  date,
+function ProductTeardownSummary({
   productTeardowns,
 }: {
-  date: string;
   productTeardowns: ProductTeardown[];
 }) {
   const progress = Math.min(productTeardowns.length, 3);
 
   return (
-    <section className="grid gap-3 border border-zinc-800 bg-zinc-950/70 p-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <SectionTitle eyebrow="07" title="今日 3 个产品拆解" />
-        <Badge>今日进度：{progress}/3</Badge>
+    <section className="grid gap-3 border border-zinc-800 bg-black/80 p-3">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="grid gap-1">
+          <SectionTitle eyebrow="07" title="今日 3 个产品拆解" />
+          <p
+            className={`text-sm ${
+              progress < 3 ? "text-amber-200" : "text-emerald-300"
+            }`}
+          >
+            {progress < 3
+              ? "今天还没有完成 3 个产品拆解。不要刷信息，只记录 3 个。"
+              : "今天已完成 3 个产品拆解。"}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge>今日进度：{progress}/3</Badge>
+          <Link
+            className="border border-emerald-700 px-3 py-1.5 text-sm font-semibold text-emerald-300 hover:bg-emerald-500 hover:text-black"
+            href="/today/product-teardowns"
+          >
+            打开拆解页
+          </Link>
+        </div>
       </div>
 
-      {progress < 3 ? (
-        <div className="border border-amber-800 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
-          今天还没有完成 3 个产品拆解。不要刷信息，只记录 3 个。
-        </div>
-      ) : null}
-
-      <form action={createProductTeardownAction} className="grid gap-3">
-        <input type="hidden" name="date" value={date} />
-        <div className="grid gap-2 md:grid-cols-[1.2fr_1.4fr_10rem]">
-          <Field label="产品名称">
-            <input
-              className={inputClassName}
-              name="productName"
-              placeholder="例如：TinyStart"
-              required
-            />
-          </Field>
-          <Field label="产品链接">
-            <input
-              className={inputClassName}
-              name="productUrl"
-              placeholder="可选"
-            />
-          </Field>
-          <Field label="来源">
-            <select className={inputClassName} name="source" defaultValue="TrustMRR">
-              {productTeardownSources.map((source) => (
-                <option key={source} value={source}>
-                  {source}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
-
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          <Field label="解决的问题">
-            <textarea className={compactTextareaClassName} name="problem" />
-          </Field>
-          <Field label="用户是谁">
-            <textarea className={compactTextareaClassName} name="targetUser" />
-          </Field>
-          <Field label="用户为什么需要">
-            <textarea className={compactTextareaClassName} name="whyUsersNeedIt" />
-          </Field>
-          <Field label="用户评价">
-            <textarea className={compactTextareaClassName} name="userReviews" />
-          </Field>
-          <Field label="如何找到用户">
-            <textarea className={compactTextareaClassName} name="acquisition" />
-          </Field>
-          <Field label="收入信号">
-            <textarea className={compactTextareaClassName} name="revenueSignal" />
-          </Field>
-          <Field label="我学到了什么">
-            <textarea className={compactTextareaClassName} name="whatILearned" />
-          </Field>
-          <Field label="什么做法不容易">
-            <textarea className={compactTextareaClassName} name="hardPart" />
-          </Field>
-          <Field label="一句话推销">
-            <textarea className={compactTextareaClassName} name="oneSentencePitch" />
-          </Field>
-          <Field label="不同的方法">
-            <textarea className={compactTextareaClassName} name="alternativeApproach" />
-          </Field>
-          <Field label="我能做出来吗">
-            <textarea className={compactTextareaClassName} name="canIBuildIt" />
-          </Field>
-          <Field label="冷启动策略">
-            <textarea className={compactTextareaClassName} name="coldStartStrategy" />
-          </Field>
-          <Field label="备注">
-            <textarea className={compactTextareaClassName} name="notes" />
-          </Field>
-        </div>
-
-        <div className="flex justify-end">
-          <button className={primaryButtonClassName} type="submit">
-            保存产品拆解
-          </button>
-        </div>
-      </form>
-
       {productTeardowns.length > 0 ? (
-        <div className="grid gap-2 xl:grid-cols-3">
+        <div className="flex flex-wrap gap-2 text-sm">
           {productTeardowns.map((teardown) => (
-            <ProductTeardownCard key={teardown.id} teardown={teardown} />
+            <span
+              className="border border-zinc-800 bg-zinc-950 px-2 py-1 text-zinc-300"
+              key={teardown.id}
+            >
+              {teardown.productName}
+            </span>
           ))}
         </div>
       ) : (
         <p className="text-sm text-zinc-500">今天还没有产品拆解记录。</p>
       )}
     </section>
-  );
-}
-
-function ProductTeardownCard({ teardown }: { teardown: ProductTeardown }) {
-  return (
-    <article className="grid gap-3 border border-zinc-900 bg-black p-3 text-sm text-zinc-300">
-      <div className="grid gap-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-base font-semibold text-zinc-100">
-            {teardown.productName}
-          </h3>
-          <span className="border border-zinc-800 px-2 py-0.5 font-mono text-xs text-zinc-400">
-            {teardown.source}
-          </span>
-        </div>
-        {teardown.productUrl ? (
-          <a
-            className="break-all text-xs text-emerald-300 hover:text-emerald-200"
-            href={teardown.productUrl}
-            rel="noreferrer"
-            target="_blank"
-          >
-            {teardown.productUrl}
-          </a>
-        ) : null}
-      </div>
-
-      <dl className="grid gap-2">
-        <ProductTeardownDetail label="解决的问题" value={teardown.problem} />
-        <ProductTeardownDetail label="用户是谁" value={teardown.targetUser} />
-        <ProductTeardownDetail
-          label="用户为什么需要"
-          value={teardown.whyUsersNeedIt}
-        />
-        <ProductTeardownDetail label="用户评价" value={teardown.userReviews} />
-        <ProductTeardownDetail label="如何找到用户" value={teardown.acquisition} />
-        <ProductTeardownDetail label="收入信号" value={teardown.revenueSignal} />
-        <ProductTeardownDetail label="我学到了什么" value={teardown.whatILearned} />
-        <ProductTeardownDetail label="什么做法不容易" value={teardown.hardPart} />
-        <ProductTeardownDetail
-          label="一句话推销"
-          value={teardown.oneSentencePitch}
-        />
-        <ProductTeardownDetail
-          label="不同的方法"
-          value={teardown.alternativeApproach}
-        />
-        <ProductTeardownDetail label="我能做出来吗" value={teardown.canIBuildIt} />
-        <ProductTeardownDetail
-          label="冷启动策略"
-          value={teardown.coldStartStrategy}
-        />
-        {teardown.notes ? (
-          <ProductTeardownDetail label="备注" value={teardown.notes} />
-        ) : null}
-      </dl>
-    </article>
-  );
-}
-
-function ProductTeardownDetail({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="grid gap-1">
-      <dt className="text-xs text-zinc-500">{label}</dt>
-      <dd className="break-words leading-6 text-zinc-300">{value || "未填写"}</dd>
-    </div>
   );
 }
 
@@ -741,39 +600,6 @@ async function createTaskAction(formData: FormData) {
   redirect("/today?created=task");
 }
 
-async function createProductTeardownAction(formData: FormData) {
-  "use server";
-
-  const productName = getFormValue(formData, "productName").trim();
-
-  if (!productName) {
-    return;
-  }
-
-  await createProductTeardown({
-    date: getFormValue(formData, "date") || getTodayDate(),
-    productName,
-    productUrl: getFormValue(formData, "productUrl"),
-    source: parseProductTeardownSource(getFormValue(formData, "source")),
-    problem: getFormValue(formData, "problem"),
-    targetUser: getFormValue(formData, "targetUser"),
-    whyUsersNeedIt: getFormValue(formData, "whyUsersNeedIt"),
-    userReviews: getFormValue(formData, "userReviews"),
-    acquisition: getFormValue(formData, "acquisition"),
-    revenueSignal: getFormValue(formData, "revenueSignal"),
-    whatILearned: getFormValue(formData, "whatILearned"),
-    hardPart: getFormValue(formData, "hardPart"),
-    oneSentencePitch: getFormValue(formData, "oneSentencePitch"),
-    alternativeApproach: getFormValue(formData, "alternativeApproach"),
-    canIBuildIt: getFormValue(formData, "canIBuildIt"),
-    coldStartStrategy: getFormValue(formData, "coldStartStrategy"),
-    notes: getFormValue(formData, "notes"),
-  });
-
-  revalidatePath("/today");
-  redirect("/today?created=product-teardown");
-}
-
 async function createReviewAction(formData: FormData) {
   "use server";
 
@@ -808,16 +634,6 @@ function parseList(value: string) {
     .filter(Boolean);
 }
 
-function parseProductTeardownSource(value: string): ProductTeardownSource {
-  const source = value as ProductTeardownSource;
-
-  return productTeardownSources.includes(source) ? source : "Other";
-}
-
-function getFormValue(formData: FormData, key: string) {
-  return String(formData.get(key) || "");
-}
-
 function getTodayDate() {
   const timeZone = process.env.APP_TIMEZONE || "Asia/Shanghai";
 
@@ -833,7 +649,5 @@ const inputClassName =
   "border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500";
 const textareaClassName =
   "min-h-24 border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500";
-const compactTextareaClassName =
-  "min-h-20 border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500";
 const primaryButtonClassName =
   "border border-emerald-600 bg-emerald-500 px-3 py-2 text-base font-semibold text-black hover:bg-emerald-400";
