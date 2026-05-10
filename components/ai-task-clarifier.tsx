@@ -57,8 +57,8 @@ export function AiTaskClarifier() {
               name="reasoningEffort"
               defaultValue="high"
             >
-              <option value="high">深度</option>
-              <option value="max">更细</option>
+              <option value="high">high</option>
+              <option value="max">max</option>
             </select>
           </label>
           <div className="flex items-end">
