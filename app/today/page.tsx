@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { AiTaskClarifier } from "@/components/ai-task-clarifier";
 import { CodexPacketPanel } from "@/components/codex-packet-panel";
+import { GrowthLoopPanel } from "@/components/growth-loop-panel";
 import {
   DeepSeekRequestError,
   MissingDeepSeekApiKeyError,
@@ -52,6 +53,7 @@ type TodayPageProps = {
     created?: string;
     aiReview?: string;
     aiReviewError?: string;
+    context?: string;
   }>;
 };
 
@@ -110,6 +112,8 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   const todayTeardowns = store.productTeardowns.filter(
     (teardown) => teardown.date === today,
   );
+  const todayCodexRuns = store.codexRuns.filter((run) => run.date === today);
+  const todayEvidence = store.evidence.filter((item) => item.date === today);
   const packets = tasks.map((task) => ({
     id: task.id,
     label: `${task.code} ${task.title}`,
@@ -150,6 +154,18 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         ) : null}
         {params?.created === "ai-error" ? (
           <Notice>AI 整理后的任务写入失败，请重新生成预览。</Notice>
+        ) : null}
+        {params?.created === "codex-run" ? (
+          <Notice>CodexRun 已记录。</Notice>
+        ) : null}
+        {params?.created === "codex-run-updated" ? (
+          <Notice>CodexRun 状态已更新。</Notice>
+        ) : null}
+        {params?.created === "evidence" ? (
+          <Notice>Evidence 已记录。</Notice>
+        ) : null}
+        {params?.context === "saved" ? (
+          <Notice>OperatingContext 已保存。</Notice>
         ) : null}
         {params?.aiReview === "daily-saved" ? (
           <Notice>AI 每日复盘已生成并保存。</Notice>
@@ -238,10 +254,18 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
 
         <ProductTeardownSummary productTeardowns={todayTeardowns} />
 
+        <GrowthLoopPanel
+          today={today}
+          tasks={tasks}
+          codexRuns={todayCodexRuns}
+          evidence={todayEvidence}
+          operatingContext={store.operatingContext}
+        />
+
         <AiTaskClarifier />
 
         <section className="grid gap-3 border border-zinc-800 bg-black/80 p-3">
-          <SectionTitle eyebrow="09" title="新增任务" />
+          <SectionTitle eyebrow="10" title="新增任务" />
           <form action={createTaskAction} className="grid gap-3">
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               <Field label="任务标题">
@@ -314,12 +338,12 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
           id="codex-packet-generator"
           className="grid gap-3 border border-zinc-800 bg-zinc-950/70 p-3"
         >
-          <SectionTitle eyebrow="10" title="Codex 任务包" />
+          <SectionTitle eyebrow="11" title="Codex 任务包" />
           <CodexPacketPanel packets={packets} />
         </section>
 
         <section className="grid gap-3 border border-zinc-800 bg-black/80 p-3">
-          <SectionTitle eyebrow="11" title="晚间复盘" />
+          <SectionTitle eyebrow="12" title="晚间复盘" />
           <form action={createReviewAction} className="grid gap-3">
             <input type="hidden" name="date" value={today} />
             <input type="hidden" name="plannedP0" value={p0?.id || ""} />
@@ -353,6 +377,14 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
                   defaultValue={latestReview?.tomorrowP0}
                 />
               </Field>
+              <Field label="系统更新">
+                <textarea
+                  className={textareaClassName}
+                  name="systemUpdate"
+                  defaultValue={latestReview?.systemUpdate}
+                  placeholder="今天的使用结果要求系统明天改变什么"
+                />
+              </Field>
               <Field label="备注">
                 <textarea
                   className={textareaClassName}
@@ -377,7 +409,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         />
 
         <section className="grid gap-3 border border-emerald-900/70 bg-emerald-950/15 p-3">
-          <SectionTitle eyebrow="13" title="导出 Markdown" />
+          <SectionTitle eyebrow="14" title="导出 Markdown" />
           <p className="text-sm text-zinc-400">
             若设置 OBSIDIAN_VAULT_PATH，将写入 00-Daily；否则写入本项目 exports。
           </p>
@@ -554,7 +586,7 @@ function AiReviewCoachSection({
   return (
     <section className="grid gap-3 border border-zinc-800 bg-black/80 p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <SectionTitle eyebrow="12" title="AI 复盘教练" />
+        <SectionTitle eyebrow="13" title="AI 复盘教练" />
         <div className="flex flex-wrap gap-2">
           <form action={generateTodayAiDailyReviewAction}>
             <button className={primaryButtonClassName} type="submit">
@@ -836,6 +868,7 @@ async function createReviewAction(formData: FormData) {
     fakeProgress: String(formData.get("fakeProgress") || ""),
     driftFlags: parseList(String(formData.get("driftFlags") || "")),
     tomorrowP0: String(formData.get("tomorrowP0") || ""),
+    systemUpdate: String(formData.get("systemUpdate") || ""),
     notes: String(formData.get("notes") || ""),
   });
 

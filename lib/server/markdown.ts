@@ -3,7 +3,10 @@ import { readFile, writeFile } from "node:fs/promises";
 
 import type {
   AiDailyReview,
+  CodexRun,
   DailyReview,
+  Evidence,
+  OperatingContext,
   ProductTeardown,
   Task,
 } from "@/lib/types";
@@ -23,6 +26,9 @@ type DailyMarkdownInput = {
   latestReview?: DailyReview;
   latestAiDailyReview?: AiDailyReview;
   p0Decision: P0Decision;
+  codexRuns: CodexRun[];
+  evidence: Evidence[];
+  operatingContext: OperatingContext;
   productTeardowns: ProductTeardown[];
 };
 
@@ -42,6 +48,9 @@ export function buildDailyMarkdown({
   latestReview,
   latestAiDailyReview,
   p0Decision,
+  codexRuns,
+  evidence,
+  operatingContext,
   productTeardowns,
 }: DailyMarkdownInput) {
   const p0 = p0Decision.task;
@@ -84,11 +93,21 @@ ${queueLines(waitingReview)}
 ## 今日 3 个产品拆解
 ${productTeardownMarkdown(productTeardowns)}
 
+## Growth Loop V0.2
+${operatingContextMarkdown(operatingContext)}
+
+### CodexRun 技术交付
+${codexRunsMarkdown(codexRuns)}
+
+### Evidence 真实产出
+${evidenceMarkdown(evidence)}
+
 ## Evening Review
 - 今日真实产出：${latestReview?.actualOutput || "未填写"}
 - 今日伪忙碌：${latestReview?.fakeProgress || "未填写"}
 - 偏离标签：${latestReview?.driftFlags.join(", ") || "无"}
 - 明日 P0：${latestReview?.tomorrowP0 || "未填写"}
+- 系统更新：${latestReview?.systemUpdate || "未填写"}
 - 备注：${latestReview?.notes || "无"}
 
 ## AI 每日复盘
@@ -181,6 +200,44 @@ function productTeardownMarkdown(productTeardowns: ProductTeardown[]) {
 - 备注：${singleLine(teardown.notes || "无")}`,
     )
     .join("\n\n");
+}
+
+function operatingContextMarkdown(context: OperatingContext) {
+  return `### OperatingContext 长期方向
+- 长期方向：${singleLine(context.northStar || "未填写")}
+- 当前焦点：${singleLine(context.currentFocus || "未填写")}
+- 约束：${listInline(context.activeConstraints)}
+- 反目标：${listInline(context.antiGoals)}
+- 运行原则：${listInline(context.principles)}`;
+}
+
+function codexRunsMarkdown(codexRuns: CodexRun[]) {
+  if (codexRuns.length === 0) {
+    return "- 今日未记录 CodexRun。";
+  }
+
+  return codexRuns
+    .map(
+      (run) => `- ${singleLine(run.title)} [${run.status}]
+  - 期望产出：${singleLine(run.expectedOutput || "未填写")}
+  - 实际结果：${singleLine(run.actualOutput || "未填写")}
+  - 任务包：${singleLine(run.prompt || "未填写")}`,
+    )
+    .join("\n");
+}
+
+function evidenceMarkdown(evidence: Evidence[]) {
+  if (evidence.length === 0) {
+    return "- 今日未记录 Evidence。";
+  }
+
+  return evidence
+    .map(
+      (item) => `- ${singleLine(item.title)} [${item.type}]
+  - 说明：${singleLine(item.description || "未填写")}
+  - 证据：${singleLine(item.artifactUrl || "无")}`,
+    )
+    .join("\n");
 }
 
 function aiDailyReviewMarkdown(review?: AiDailyReview) {

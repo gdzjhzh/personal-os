@@ -6,13 +6,20 @@ import type {
   AiWeeklyReview,
   CreateAiDailyReviewInput,
   CreateAiWeeklyReviewInput,
+  CreateCodexRunInput,
+  CreateEvidenceInput,
   CreateProductTeardownInput,
   CreateReviewInput,
   CreateTaskInput,
+  CodexRun,
+  Evidence,
+  OperatingContext,
   ProductTeardown,
   Store,
   Task,
   TaskStatus,
+  UpdateCodexRunPatch,
+  UpdateOperatingContextInput,
   UpdateTaskPatch,
 } from "@/lib/types";
 import { chooseTodayP0 } from "@/lib/server/scoring";
@@ -224,6 +231,9 @@ export async function exportDailyMarkdown(date: string) {
     latestReview,
     latestAiDailyReview,
     p0Decision,
+    codexRuns: store.codexRuns.filter((run) => run.date === date),
+    evidence: store.evidence.filter((item) => item.date === date),
+    operatingContext: store.operatingContext,
     productTeardowns: store.productTeardowns.filter(
       (teardown) => teardown.date === date,
     ),
@@ -234,6 +244,95 @@ export async function exportDailyMarkdown(date: string) {
   await upsertGeneratedBlock(filePath, markdown);
 
   return filePath;
+}
+
+export async function createCodexRun(input: CreateCodexRunInput) {
+  const store = await readStore();
+  const now = new Date().toISOString();
+  const run: CodexRun = {
+    ...input,
+    id: crypto.randomUUID(),
+    date: input.date,
+    taskId: emptyToUndefined(input.taskId),
+    title: input.title.trim(),
+    prompt: input.prompt.trim(),
+    expectedOutput: input.expectedOutput.trim(),
+    actualOutput: input.actualOutput.trim(),
+    status: input.status,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  store.codexRuns.push(run);
+  await writeStore(store);
+  return run;
+}
+
+export async function updateCodexRun(id: string, patch: UpdateCodexRunPatch) {
+  const store = await readStore();
+  const index = store.codexRuns.findIndex((run) => run.id === id);
+
+  if (index === -1) {
+    throw new Error(`Codex run not found: ${id}`);
+  }
+
+  const current = store.codexRuns[index];
+  const next: CodexRun = {
+    ...current,
+    ...patch,
+    taskId: patch.taskId === undefined ? current.taskId : emptyToUndefined(patch.taskId),
+    title: patch.title?.trim() || current.title,
+    prompt: patch.prompt?.trim() || current.prompt,
+    expectedOutput: patch.expectedOutput?.trim() || current.expectedOutput,
+    actualOutput:
+      patch.actualOutput === undefined
+        ? current.actualOutput
+        : patch.actualOutput.trim(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  store.codexRuns[index] = next;
+  await writeStore(store);
+  return next;
+}
+
+export async function createEvidence(input: CreateEvidenceInput) {
+  const store = await readStore();
+  const now = new Date().toISOString();
+  const evidence: Evidence = {
+    ...input,
+    id: crypto.randomUUID(),
+    date: input.date,
+    title: input.title.trim(),
+    description: input.description.trim(),
+    artifactUrl: emptyToUndefined(input.artifactUrl),
+    taskId: emptyToUndefined(input.taskId),
+    codexRunId: emptyToUndefined(input.codexRunId),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  store.evidence.push(evidence);
+  await writeStore(store);
+  return evidence;
+}
+
+export async function updateOperatingContext(
+  input: UpdateOperatingContextInput,
+) {
+  const store = await readStore();
+  const operatingContext: OperatingContext = {
+    northStar: input.northStar.trim(),
+    currentFocus: input.currentFocus.trim(),
+    activeConstraints: input.activeConstraints,
+    antiGoals: input.antiGoals,
+    principles: input.principles,
+    updatedAt: new Date().toISOString(),
+  };
+
+  store.operatingContext = operatingContext;
+  await writeStore(store);
+  return operatingContext;
 }
 
 function createSeedStore(): Store {
@@ -295,11 +394,15 @@ function createSeedStore(): Store {
     productTeardowns: [],
     aiDailyReviews: [],
     aiWeeklyReviews: [],
+    codexRuns: [],
+    evidence: [],
+    operatingContext: createDefaultOperatingContext(now),
   };
 }
 
 function normalizeStore(value: unknown): Store {
   const store = value as Partial<Store>;
+  const now = new Date().toISOString();
 
   return {
     tasks: Array.isArray(store.tasks) ? store.tasks : [],
@@ -313,6 +416,55 @@ function normalizeStore(value: unknown): Store {
     aiWeeklyReviews: Array.isArray(store.aiWeeklyReviews)
       ? store.aiWeeklyReviews
       : [],
+    codexRuns: Array.isArray(store.codexRuns) ? store.codexRuns : [],
+    evidence: Array.isArray(store.evidence) ? store.evidence : [],
+    operatingContext: normalizeOperatingContext(store.operatingContext, now),
+  };
+}
+
+function createDefaultOperatingContext(now: string): OperatingContext {
+  return {
+    northStar: "成为能持续交付独立 SaaS 产品的人。",
+    currentFocus: "每天围绕一个真实产出推进最小闭环。",
+    activeConstraints: ["本地优先", "不引入数据库", "不做泛学习"],
+    antiGoals: ["刷信息", "重构系统", "做通用项目管理"],
+    principles: ["任务必须有 nextAction 和 doneWhen", "真实产出优先于阅读", "复盘要更新系统"],
+    updatedAt: now,
+  };
+}
+
+function normalizeOperatingContext(
+  value: unknown,
+  now: string,
+): OperatingContext {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return createDefaultOperatingContext(now);
+  }
+
+  const context = value as Partial<OperatingContext>;
+
+  return {
+    northStar:
+      typeof context.northStar === "string" && context.northStar.trim()
+        ? context.northStar
+        : "成为能持续交付独立 SaaS 产品的人。",
+    currentFocus:
+      typeof context.currentFocus === "string" && context.currentFocus.trim()
+        ? context.currentFocus
+        : "每天围绕一个真实产出推进最小闭环。",
+    activeConstraints: Array.isArray(context.activeConstraints)
+      ? context.activeConstraints.filter((item) => typeof item === "string")
+      : ["本地优先", "不引入数据库", "不做泛学习"],
+    antiGoals: Array.isArray(context.antiGoals)
+      ? context.antiGoals.filter((item) => typeof item === "string")
+      : ["刷信息", "重构系统", "做通用项目管理"],
+    principles: Array.isArray(context.principles)
+      ? context.principles.filter((item) => typeof item === "string")
+      : ["任务必须有 nextAction 和 doneWhen", "真实产出优先于阅读", "复盘要更新系统"],
+    updatedAt:
+      typeof context.updatedAt === "string" && context.updatedAt
+        ? context.updatedAt
+        : now,
   };
 }
 

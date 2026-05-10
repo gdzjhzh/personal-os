@@ -42,6 +42,7 @@ export type DailyReview = {
   fakeProgress: string;
   driftFlags: string[];
   tomorrowP0: string;
+  systemUpdate?: string;
   notes: string;
   createdAt: string;
 };
@@ -116,12 +117,58 @@ export type AiWeeklyReview = {
   createdAt: string;
 };
 
+export type CodexRunStatus = "queued" | "running" | "shipped" | "blocked";
+
+export type CodexRun = {
+  id: string;
+  date: string;
+  taskId?: string;
+  title: string;
+  prompt: string;
+  expectedOutput: string;
+  actualOutput: string;
+  status: CodexRunStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EvidenceType =
+  | "shipping"
+  | "product_judgment"
+  | "technical_learning"
+  | "system_update";
+
+export type Evidence = {
+  id: string;
+  date: string;
+  type: EvidenceType;
+  title: string;
+  description: string;
+  artifactUrl?: string;
+  taskId?: string;
+  codexRunId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OperatingContext = {
+  northStar: string;
+  currentFocus: string;
+  activeConstraints: string[];
+  antiGoals: string[];
+  principles: string[];
+  updatedAt: string;
+};
+
 export type Store = {
   tasks: Task[];
   reviews: DailyReview[];
   productTeardowns: ProductTeardown[];
   aiDailyReviews: AiDailyReview[];
   aiWeeklyReviews: AiWeeklyReview[];
+  codexRuns: CodexRun[];
+  evidence: Evidence[];
+  operatingContext: OperatingContext;
 };
 
 export type CreateTaskInput = {
@@ -155,6 +202,25 @@ export type CreateAiDailyReviewInput = Omit<AiDailyReview, "id" | "createdAt">;
 export type CreateAiWeeklyReviewInput = Omit<
   AiWeeklyReview,
   "id" | "createdAt"
+>;
+
+export type CreateCodexRunInput = Omit<
+  CodexRun,
+  "id" | "createdAt" | "updatedAt"
+>;
+
+export type UpdateCodexRunPatch = Partial<
+  Omit<CodexRun, "id" | "createdAt" | "updatedAt">
+>;
+
+export type CreateEvidenceInput = Omit<
+  Evidence,
+  "id" | "createdAt" | "updatedAt"
+>;
+
+export type UpdateOperatingContextInput = Omit<
+  OperatingContext,
+  "updatedAt"
 >;
 
 export type ClarifiedTaskStatus = Extract<
