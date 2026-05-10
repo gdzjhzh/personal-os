@@ -7,6 +7,8 @@ type DeepSeekChatCompletionOptions = {
   messages: DeepSeekMessage[];
   temperature?: number;
   maxTokens?: number;
+  reasoningEffort?: DeepSeekReasoningEffort;
+  enableOneMillionContext?: boolean;
 };
 
 type DeepSeekChatCompletionResponse = {
@@ -16,6 +18,8 @@ type DeepSeekChatCompletionResponse = {
     };
   }>;
 };
+
+export type DeepSeekReasoningEffort = "high" | "max";
 
 export class MissingDeepSeekApiKeyError extends Error {
   constructor() {
@@ -38,6 +42,8 @@ export async function createDeepSeekChatCompletion({
   messages,
   temperature = 0.2,
   maxTokens = 1200,
+  reasoningEffort = readReasoningEffortFromEnv(),
+  enableOneMillionContext = readOneMillionContextFromEnv(),
 }: DeepSeekChatCompletionOptions) {
   const apiKey =
     process.env.DEEPSEEK_API_KEY?.trim() || process.env.PSOS_AI_API_KEY?.trim();
@@ -46,7 +52,10 @@ export async function createDeepSeekChatCompletion({
     throw new MissingDeepSeekApiKeyError();
   }
 
-  const model = process.env.DEEPSEEK_MODEL?.trim() || "deepseek-v4-pro";
+  const model = resolveDeepSeekModel(
+    process.env.DEEPSEEK_MODEL?.trim() || "deepseek-v4-pro",
+    enableOneMillionContext,
+  );
   const response = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
     headers: {
@@ -56,6 +65,8 @@ export async function createDeepSeekChatCompletion({
     body: JSON.stringify({
       model,
       messages,
+      thinking: { type: "enabled" },
+      reasoning_effort: reasoningEffort,
       temperature,
       max_tokens: maxTokens,
       response_format: { type: "json_object" },
@@ -77,4 +88,22 @@ export async function createDeepSeekChatCompletion({
   }
 
   return content;
+}
+
+function resolveDeepSeekModel(baseModel: string, enableOneMillionContext: boolean) {
+  const normalized = baseModel.replace(/\[1m\]$/i, "");
+
+  if (enableOneMillionContext) {
+    return `${normalized}[1m]`;
+  }
+
+  return normalized;
+}
+
+function readReasoningEffortFromEnv(): DeepSeekReasoningEffort {
+  return process.env.DEEPSEEK_REASONING_EFFORT === "max" ? "max" : "high";
+}
+
+function readOneMillionContextFromEnv() {
+  return process.env.DEEPSEEK_ENABLE_1M === "true";
 }

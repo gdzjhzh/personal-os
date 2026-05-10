@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import type { DeepSeekReasoningEffort } from "@/lib/server/ai/deepseek";
 import { clarifyTask, TaskClarifierError } from "@/lib/server/ai/taskClarifier";
 import { createTask } from "@/lib/server/store";
 import type {
@@ -43,6 +44,8 @@ export async function clarifyTaskAction(
       rawTask,
       project: String(formData.get("project") || "Personal SaaS OS"),
       currentPhaseContext: String(formData.get("currentPhaseContext") || ""),
+      reasoningEffort: readReasoningEffort(formData),
+      enableOneMillionContext: formData.get("enableOneMillionContext") === "on",
     });
 
     return {
@@ -64,6 +67,10 @@ export async function clarifyTaskAction(
       message: "AI 请求失败，请检查网络、API Key 或模型配置。",
     };
   }
+}
+
+function readReasoningEffort(formData: FormData): DeepSeekReasoningEffort {
+  return formData.get("reasoningEffort") === "max" ? "max" : "high";
 }
 
 export async function saveClarifiedTaskAction(formData: FormData) {

@@ -41,8 +41,10 @@ APP_TIMEZONE=Asia/Shanghai
 DEEPSEEK_API_KEY=your_deepseek_api_key
 DEEPSEEK_MODEL=deepseek-v4-pro
 PSOS_AI_API_KEY=your_deepseek_api_key
+DEEPSEEK_REASONING_EFFORT=high
+DEEPSEEK_ENABLE_1M=false
 ```
 
 If `OBSIDIAN_VAULT_PATH` is unset, Markdown export writes to `exports/YYYY-MM-DD.md`.
 
-`DEEPSEEK_API_KEY` is only needed for the 任务梳理 section. `PSOS_AI_API_KEY` is supported as a local alias. Without a valid key, the app still runs and shows a Chinese configuration error when AI clarification is used.
+`DEEPSEEK_API_KEY` is only needed for the 任务梳理 section. `PSOS_AI_API_KEY` is supported as a local alias. The UI lets you choose `high` or `max` reasoning effort and whether to append `[1m]` to the model for 1M context. Without a valid key, the app still runs and shows a Chinese configuration error when AI clarification is used.

@@ -8,6 +8,7 @@ import type {
 import {
   createDeepSeekChatCompletion,
   DeepSeekRequestError,
+  type DeepSeekReasoningEffort,
   MissingDeepSeekApiKeyError,
 } from "@/lib/server/ai/deepseek";
 
@@ -15,6 +16,8 @@ type ClarifyTaskInput = {
   rawTask: string;
   project?: string;
   currentPhaseContext?: string;
+  reasoningEffort?: DeepSeekReasoningEffort;
+  enableOneMillionContext?: boolean;
 };
 
 type ClarifyTaskSuccess = {
@@ -68,6 +71,8 @@ export async function clarifyTask(
 ): Promise<ClarifyTaskSuccess> {
   try {
     const rawOutput = await createDeepSeekChatCompletion({
+      reasoningEffort: input.reasoningEffort,
+      enableOneMillionContext: input.enableOneMillionContext,
       messages: [
         {
           role: "system",
