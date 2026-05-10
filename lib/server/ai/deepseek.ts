@@ -5,8 +5,6 @@ type DeepSeekMessage = {
 
 type DeepSeekChatCompletionOptions = {
   messages: DeepSeekMessage[];
-  temperature?: number;
-  maxTokens?: number;
   reasoningEffort?: DeepSeekReasoningEffort;
   enableOneMillionContext?: boolean;
 };
@@ -40,8 +38,6 @@ export class DeepSeekRequestError extends Error {
 
 export async function createDeepSeekChatCompletion({
   messages,
-  temperature = 0.2,
-  maxTokens = 1200,
   reasoningEffort = readReasoningEffortFromEnv(),
   enableOneMillionContext = readOneMillionContextFromEnv(),
 }: DeepSeekChatCompletionOptions) {
@@ -67,9 +63,7 @@ export async function createDeepSeekChatCompletion({
       messages,
       thinking: { type: "enabled" },
       reasoning_effort: reasoningEffort,
-      temperature,
-      max_tokens: maxTokens,
-      response_format: { type: "json_object" },
+      stream: false,
     }),
   });
 
