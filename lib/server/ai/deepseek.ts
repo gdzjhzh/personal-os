@@ -6,7 +6,6 @@ type DeepSeekMessage = {
 type DeepSeekChatCompletionOptions = {
   messages: DeepSeekMessage[];
   reasoningEffort?: DeepSeekReasoningEffort;
-  enableOneMillionContext?: boolean;
 };
 
 type DeepSeekChatCompletionResponse = {
@@ -39,7 +38,6 @@ export class DeepSeekRequestError extends Error {
 export async function createDeepSeekChatCompletion({
   messages,
   reasoningEffort = readReasoningEffortFromEnv(),
-  enableOneMillionContext = readOneMillionContextFromEnv(),
 }: DeepSeekChatCompletionOptions) {
   const apiKey =
     process.env.DEEPSEEK_API_KEY?.trim() || process.env.PSOS_AI_API_KEY?.trim();
@@ -48,9 +46,8 @@ export async function createDeepSeekChatCompletion({
     throw new MissingDeepSeekApiKeyError();
   }
 
-  const model = resolveDeepSeekModel(
+  const model = normalizeDeepSeekModel(
     process.env.DEEPSEEK_MODEL?.trim() || "deepseek-v4-pro",
-    enableOneMillionContext,
   );
   const response = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
@@ -84,20 +81,10 @@ export async function createDeepSeekChatCompletion({
   return content;
 }
 
-function resolveDeepSeekModel(baseModel: string, enableOneMillionContext: boolean) {
-  const normalized = baseModel.replace(/\[1m\]$/i, "");
-
-  if (enableOneMillionContext) {
-    return `${normalized}[1m]`;
-  }
-
-  return normalized;
+function normalizeDeepSeekModel(baseModel: string) {
+  return baseModel.replace(/\[1m\]$/i, "");
 }
 
 function readReasoningEffortFromEnv(): DeepSeekReasoningEffort {
   return process.env.DEEPSEEK_REASONING_EFFORT === "max" ? "max" : "high";
-}
-
-function readOneMillionContextFromEnv() {
-  return process.env.DEEPSEEK_ENABLE_1M === "true";
 }

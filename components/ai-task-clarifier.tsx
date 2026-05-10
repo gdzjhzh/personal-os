@@ -41,7 +41,7 @@ export function AiTaskClarifier() {
             required
           />
         </label>
-        <div className="grid gap-2 md:grid-cols-[1fr_12rem_auto_auto]">
+        <div className="grid gap-2 md:grid-cols-[1fr_12rem_auto]">
           <label className="grid gap-1 text-sm text-zinc-500">
             项目
             <input
@@ -60,14 +60,6 @@ export function AiTaskClarifier() {
               <option value="high">high</option>
               <option value="max">max</option>
             </select>
-          </label>
-          <label className="flex items-end gap-2 pb-2 text-sm text-zinc-300">
-            <input
-              className="h-4 w-4 accent-emerald-500"
-              name="enableOneMillionContext"
-              type="checkbox"
-            />
-            启用 1M
           </label>
           <div className="flex items-end">
             <button

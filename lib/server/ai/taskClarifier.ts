@@ -17,7 +17,6 @@ type ClarifyTaskInput = {
   project?: string;
   currentPhaseContext?: string;
   reasoningEffort?: DeepSeekReasoningEffort;
-  enableOneMillionContext?: boolean;
 };
 
 type ClarifyTaskSuccess = {
@@ -72,7 +71,6 @@ export async function clarifyTask(
   try {
     const rawOutput = await createDeepSeekChatCompletion({
       reasoningEffort: input.reasoningEffort,
-      enableOneMillionContext: input.enableOneMillionContext,
       messages: [
         {
           role: "system",

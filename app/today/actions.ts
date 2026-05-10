@@ -45,7 +45,6 @@ export async function clarifyTaskAction(
       project: String(formData.get("project") || "Personal SaaS OS"),
       currentPhaseContext: String(formData.get("currentPhaseContext") || ""),
       reasoningEffort: readReasoningEffort(formData),
-      enableOneMillionContext: formData.get("enableOneMillionContext") === "on",
     });
 
     return {
