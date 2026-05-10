@@ -33,7 +33,7 @@ export function AiTaskClarifier() {
           value="make Personal SaaS OS a daily-used task planning and review system"
         />
         <label className="grid gap-1 text-sm text-zinc-500">
-          待澄清任务
+          待整理任务
           <textarea
             className="min-h-28 border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500"
             name="rawTask"
@@ -51,7 +51,7 @@ export function AiTaskClarifier() {
             />
           </label>
           <label className="grid gap-1 text-sm text-zinc-500">
-            澄清方式
+            整理方式
             <select
               className="border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500"
               name="reasoningEffort"
@@ -67,7 +67,7 @@ export function AiTaskClarifier() {
               type="submit"
               disabled={isPending}
             >
-              {isPending ? "澄清中..." : "澄清任务"}
+              {isPending ? "整理中..." : "整理任务"}
             </button>
           </div>
         </div>

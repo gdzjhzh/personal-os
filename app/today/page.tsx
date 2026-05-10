@@ -105,10 +105,10 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         {params?.review === "saved" ? <Notice>每日复盘已保存。</Notice> : null}
         {params?.created === "task" ? <Notice>新任务已写入 SSOT。</Notice> : null}
         {params?.created === "ai-task" ? (
-          <Notice>AI 澄清任务已写入 SSOT。</Notice>
+          <Notice>AI 整理后的任务已写入 SSOT。</Notice>
         ) : null}
         {params?.created === "ai-error" ? (
-          <Notice>AI 澄清任务写入失败，请重新生成预览。</Notice>
+          <Notice>AI 整理后的任务写入失败，请重新生成预览。</Notice>
         ) : null}
 
         <section className="grid gap-3 border border-emerald-900/60 bg-zinc-950/80 p-4">

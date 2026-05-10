@@ -46,4 +46,4 @@ DEEPSEEK_REASONING_EFFORT=high
 
 If `OBSIDIAN_VAULT_PATH` is unset, Markdown export writes to `exports/YYYY-MM-DD.md`.
 
-`DEEPSEEK_API_KEY` is only needed for the 任务梳理 section. `PSOS_AI_API_KEY` is supported as a local alias. The UI lets you choose `high` or `max` reasoning effort. DeepSeek V4 models provide 1M context with the base model name, so this app keeps `DEEPSEEK_MODEL=deepseek-v4-pro` for the OpenAI-compatible Chat Completions API. Without a valid key, the app still runs and shows a Chinese configuration error when AI clarification is used.
+`DEEPSEEK_API_KEY` is only needed for the 任务梳理 section. `PSOS_AI_API_KEY` is supported as a local alias. The UI lets you choose 深度 or 更细 reasoning effort. DeepSeek V4 models provide 1M context with the base model name, so this app keeps `DEEPSEEK_MODEL=deepseek-v4-pro` for the OpenAI-compatible Chat Completions API. Without a valid key, the app still runs and shows a Chinese configuration error when AI task organization is used.

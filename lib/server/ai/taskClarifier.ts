@@ -95,7 +95,7 @@ export async function clarifyTask(
     if (error instanceof MissingDeepSeekApiKeyError) {
       throw new TaskClarifierError(
         "missing_api_key",
-        "未配置 DEEPSEEK_API_KEY，无法使用 AI 澄清。",
+        "未配置 DEEPSEEK_API_KEY，无法使用 AI 任务整理。",
       );
     }
 
