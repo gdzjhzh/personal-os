@@ -18,11 +18,11 @@ export function AiTaskClarifier() {
   );
 
   return (
-    <section className="grid gap-3 border border-emerald-900/70 bg-emerald-950/10 p-3">
+    <section className="grid gap-3 border border-zinc-800 bg-black/80 p-3">
       <div className="flex items-center gap-2">
-        <span className="text-sm text-emerald-400">07A</span>
-        <h2 className="text-base font-semibold uppercase text-zinc-100">
-          任务梳理
+        <span className="font-mono text-xs text-emerald-400">07</span>
+        <h2 className="text-base font-semibold text-zinc-100">
+          AI 任务梳理
         </h2>
       </div>
 
@@ -33,11 +33,11 @@ export function AiTaskClarifier() {
           value="make Personal SaaS OS a daily-used task planning and review system"
         />
         <label className="grid gap-1 text-sm text-zinc-500">
-          模糊任务输入
+          待澄清任务
           <textarea
             className="min-h-28 border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500"
             name="rawTask"
-            placeholder="例如：研究几个 SaaS 产品，看看我能做什么"
+            placeholder="例如：研究几个 SaaS 产品，拆出今天能推进的一步"
             required
           />
         </label>
@@ -51,14 +51,14 @@ export function AiTaskClarifier() {
             />
           </label>
           <label className="grid gap-1 text-sm text-zinc-500">
-            推理强度
+            澄清方式
             <select
               className="border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500"
               name="reasoningEffort"
               defaultValue="high"
             >
-              <option value="high">high</option>
-              <option value="max">max</option>
+              <option value="high">深度</option>
+              <option value="max">更细</option>
             </select>
           </label>
           <div className="flex items-end">
@@ -67,7 +67,7 @@ export function AiTaskClarifier() {
               type="submit"
               disabled={isPending}
             >
-              {isPending ? "澄清中..." : "AI 澄清"}
+              {isPending ? "澄清中..." : "澄清任务"}
             </button>
           </div>
         </div>
@@ -104,7 +104,7 @@ function ClarifiedPreview({
     <div className="grid gap-3 border border-zinc-800 bg-black p-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-sm text-zinc-500">结构化预览</p>
+          <p className="text-sm text-zinc-500">任务预览</p>
           <h3 className="text-base font-semibold text-zinc-100">{task.title}</h3>
         </div>
         <form action={saveClarifiedTaskAction}>
@@ -127,7 +127,7 @@ function ClarifiedPreview({
       </dl>
 
       <details className="text-sm text-zinc-500">
-        <summary className="cursor-pointer text-zinc-400">查看原始 AI JSON</summary>
+        <summary className="cursor-pointer text-zinc-400">查看原始输出</summary>
         <textarea
           className="mt-2 min-h-56 w-full border border-zinc-800 bg-zinc-950 p-2 font-mono text-sm text-zinc-300"
           readOnly
@@ -164,7 +164,7 @@ function SaveButton() {
       type="submit"
       disabled={pending}
     >
-      {pending ? "写入中..." : "写入 SSOT"}
+      {pending ? "写入中..." : "写入任务"}
     </button>
   );
 }

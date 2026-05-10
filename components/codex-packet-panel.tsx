@@ -14,7 +14,7 @@ type CodexPacketPanelProps = {
 
 export function CodexPacketPanel({ packets }: CodexPacketPanelProps) {
   const [selectedId, setSelectedId] = useState(packets[0]?.id || "");
-  const [copyState, setCopyState] = useState("未复制");
+  const [copyState, setCopyState] = useState("待复制");
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
   const selected = useMemo(
@@ -51,7 +51,7 @@ export function CodexPacketPanel({ packets }: CodexPacketPanelProps) {
             value={selected?.id || ""}
             onChange={(event) => {
               setSelectedId(event.target.value);
-              setCopyState("未复制");
+              setCopyState("待复制");
             }}
           >
             {packets.map((packet) => (
@@ -67,14 +67,14 @@ export function CodexPacketPanel({ packets }: CodexPacketPanelProps) {
             onClick={copyPacket}
             className="border border-emerald-600 bg-emerald-500 px-3 py-2 text-base font-semibold text-black hover:bg-emerald-400"
           >
-            复制 Packet
+            复制给 Codex
           </button>
           <span className="pb-2 text-sm text-zinc-500">{copyState}</span>
         </div>
       </div>
       <textarea
         ref={textAreaRef}
-        className="min-h-96 w-full resize-y border border-zinc-800 bg-black p-3 font-mono text-sm leading-6 text-zinc-200 outline-none focus:border-emerald-500"
+        className="min-h-80 w-full resize-y border border-zinc-800 bg-black p-3 font-mono text-sm leading-6 text-zinc-200 outline-none focus:border-emerald-500"
         readOnly
         value={selected?.packet || ""}
       />

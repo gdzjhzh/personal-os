@@ -79,19 +79,23 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   }));
 
   return (
-    <main className="min-h-screen bg-[#070707] px-3 py-4 font-mono text-zinc-100 sm:px-5 lg:px-8">
-      <div className="mx-auto grid max-w-[1600px] gap-4">
-        <header className="flex flex-col gap-2 border-b border-zinc-800 pb-3 md:flex-row md:items-end md:justify-between">
+    <main className="min-h-screen bg-[#080908] px-3 py-4 font-sans text-zinc-100 sm:px-5 lg:px-8">
+      <div className="mx-auto grid max-w-[1480px] gap-4">
+        <header className="flex flex-col gap-2 border-b border-zinc-800 pb-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm uppercase text-emerald-400">
-              Personal SaaS OS / Active Task SSOT
+            <p className="font-mono text-xs text-emerald-400">
+              Personal SaaS OS · 本地执行台
             </p>
-            <h1 className="text-2xl font-semibold text-zinc-50 sm:text-3xl">
+            <h1 className="mt-1 text-2xl font-semibold text-zinc-50 sm:text-3xl">
               今日执行台
             </h1>
           </div>
-          <div className="text-sm text-zinc-500">
-            日期：{today} / 存储：data/store.json / 本地优先
+          <div className="text-sm leading-6 text-zinc-500 md:text-right">
+            <div>日期：{today} · 本地优先</div>
+            <div>
+              任务：{tasks.length} · 推进：{activeTasks.length} · 等待/复核：
+              {waitingReviewTasks.length}
+            </div>
           </div>
         </header>
 
@@ -107,19 +111,19 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
           <Notice>AI 澄清任务写入失败，请重新生成预览。</Notice>
         ) : null}
 
-        <section className="grid gap-3 border border-zinc-800 bg-zinc-950/70 p-3">
-          <SectionTitle eyebrow="01" title="Today P0" />
+        <section className="grid gap-3 border border-emerald-900/60 bg-zinc-950/80 p-4">
+          <SectionTitle eyebrow="01" title="今日 P0" />
           {p0 ? (
             <div className="grid gap-2 text-base">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge>{p0.priority}</Badge>
-                <span className="text-emerald-300">{p0.code}</span>
-                <span className="font-semibold text-zinc-50">{p0.title}</span>
+                <span className="font-mono text-emerald-300">{p0.code}</span>
+                <span className="text-lg font-semibold text-zinc-50">{p0.title}</span>
               </div>
               <KeyValue label="当前可推进动作" value={p0.nextAction || "未填写"} />
               <KeyValue label="完成标准" value={p0.doneWhen || "未填写"} />
               <KeyValue label="为什么是 P0" value={p0Decision.reasons.join("；")} />
-              <KeyValue label="AI 排程建议" value={scheduleAdvice(p0Decision)} />
+              <KeyValue label="安排建议" value={scheduleAdvice(p0Decision)} />
             </div>
           ) : (
             <p className="text-base text-zinc-400">
@@ -129,13 +133,13 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         </section>
 
         <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
-          <section className="grid gap-3 border border-zinc-800 bg-black p-3">
-            <SectionTitle eyebrow="02" title="Minimum 25-minute action" />
+          <section className="grid gap-3 border border-zinc-800 bg-black/80 p-3">
+            <SectionTitle eyebrow="02" title="25 分钟最小动作" />
             <p className="text-base text-emerald-300">{minimumActionFromP0(p0)}</p>
           </section>
 
-          <section className="grid gap-3 border border-zinc-800 bg-black p-3">
-            <SectionTitle eyebrow="03" title="Do-not-do list" />
+          <section className="grid gap-3 border border-zinc-800 bg-black/80 p-3">
+            <SectionTitle eyebrow="03" title="今日不做" />
             <ul className="grid gap-1 text-sm text-zinc-300 sm:grid-cols-2">
               {DO_NOT_DO_LIST.map((item) => (
                 <li key={item} className="border-l border-zinc-700 pl-2">
@@ -147,9 +151,9 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         </div>
 
         <section className="grid gap-3 border border-zinc-800 bg-zinc-950/70 p-3">
-          <SectionTitle eyebrow="04" title="Active Task SSOT table" />
+          <SectionTitle eyebrow="04" title="当前任务 SSOT" />
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
+            <table className="w-full min-w-[1180px] border-collapse text-left text-sm">
               <thead className="text-zinc-500">
                 <tr className="border-y border-zinc-800">
                   <Th>优先级</Th>
@@ -174,20 +178,20 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         <div className="grid gap-4 xl:grid-cols-2">
           <QueueSection
             eyebrow="05"
-            title="Codex Ready queue"
+            title="Codex 队列"
             tasks={codexReadyTasks}
           />
           <QueueSection
             eyebrow="06"
-            title="Waiting / Review queue"
+            title="等待 / 复核"
             tasks={waitingReviewTasks}
           />
         </div>
 
         <AiTaskClarifier />
 
-        <section className="grid gap-3 border border-zinc-800 bg-black p-3">
-          <SectionTitle eyebrow="07B" title="Add Task form" />
+        <section className="grid gap-3 border border-zinc-800 bg-black/80 p-3">
+          <SectionTitle eyebrow="08" title="新增任务" />
           <form action={createTaskAction} className="grid gap-3">
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               <Field label="任务标题">
@@ -260,12 +264,12 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
           id="codex-packet-generator"
           className="grid gap-3 border border-zinc-800 bg-zinc-950/70 p-3"
         >
-          <SectionTitle eyebrow="08" title="Codex Task Packet generator" />
+          <SectionTitle eyebrow="09" title="Codex 任务包" />
           <CodexPacketPanel packets={packets} />
         </section>
 
-        <section className="grid gap-3 border border-zinc-800 bg-black p-3">
-          <SectionTitle eyebrow="09" title="Evening Review form" />
+        <section className="grid gap-3 border border-zinc-800 bg-black/80 p-3">
+          <SectionTitle eyebrow="10" title="晚间复盘" />
           <form action={createReviewAction} className="grid gap-3">
             <input type="hidden" name="date" value={today} />
             <input type="hidden" name="plannedP0" value={p0?.id || ""} />
@@ -315,8 +319,8 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
           </form>
         </section>
 
-        <section className="grid gap-3 border border-emerald-900/80 bg-emerald-950/20 p-3">
-          <SectionTitle eyebrow="10" title="Export to Obsidian / Markdown" />
+        <section className="grid gap-3 border border-emerald-900/70 bg-emerald-950/15 p-3">
+          <SectionTitle eyebrow="11" title="导出 Markdown" />
           <p className="text-sm text-zinc-400">
             若设置 OBSIDIAN_VAULT_PATH，将写入 00-Daily；否则写入本项目 exports。
           </p>
@@ -349,7 +353,7 @@ function TaskRow({ task }: { task: Task }) {
       </Td>
       <Td>
         <div className="grid gap-1">
-          <span className="text-emerald-300">{task.code}</span>
+          <span className="font-mono text-emerald-300">{task.code}</span>
           <span className="font-semibold text-zinc-100">{task.title}</span>
           <span className="text-zinc-500">{task.project}</span>
         </div>
@@ -360,25 +364,29 @@ function TaskRow({ task }: { task: Task }) {
       <Td className="max-w-72">{task.doneWhen || "未填写"}</Td>
       <Td>{task.riskFlags.join(", ") || "无"}</Td>
       <Td>
-        <div className="flex min-w-72 flex-wrap gap-1">
+        <div className="flex min-w-[26rem] flex-wrap gap-1.5">
           {rowStatuses.map((status) => (
             <form key={status} action={updateTaskStatusAction}>
               <input type="hidden" name="id" value={task.id} />
               <button
-                className="border border-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+                className={`border px-2.5 py-1.5 text-xs ${
+                  task.status === status
+                    ? "border-emerald-700 bg-emerald-500/10 text-emerald-300"
+                    : "border-zinc-800 text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+                }`}
                 name="status"
                 type="submit"
                 value={status}
               >
-                set {status}
+                {statusLabels[status]}
               </button>
             </form>
           ))}
           <a
-            className="border border-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+            className="border border-zinc-800 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
             href="#codex-packet-generator"
           >
-            generate Codex packet
+            生成 Codex 包
           </a>
         </div>
       </Td>
@@ -406,7 +414,7 @@ function QueueSection({
               key={task.id}
             >
               <div className="flex flex-wrap gap-2">
-                <span className="text-emerald-300">{task.code}</span>
+                <span className="font-mono text-emerald-300">{task.code}</span>
                 <span className="text-zinc-100">{task.title}</span>
                 <span className="text-zinc-500">[{statusLabels[task.status]}]</span>
               </div>
@@ -427,8 +435,8 @@ function QueueSection({
 function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm text-emerald-400">{eyebrow}</span>
-      <h2 className="text-base font-semibold uppercase text-zinc-100">{title}</h2>
+      <span className="font-mono text-xs text-emerald-400">{eyebrow}</span>
+      <h2 className="text-base font-semibold text-zinc-100">{title}</h2>
     </div>
   );
 }
@@ -437,7 +445,7 @@ function KeyValue({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1 sm:grid-cols-[10rem_1fr]">
       <span className="text-sm text-zinc-500">{label}</span>
-      <span className="text-zinc-300">{value}</span>
+      <span className="leading-7 text-zinc-300">{value}</span>
     </div>
   );
 }
@@ -481,7 +489,7 @@ function Td({
 
 function Badge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex border border-emerald-700 px-2 py-0.5 text-xs font-semibold text-emerald-300">
+    <span className="inline-flex border border-emerald-700 px-2 py-0.5 font-mono text-xs font-semibold text-emerald-300">
       {children}
     </span>
   );
