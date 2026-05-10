@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { AiTaskClarifier } from "@/components/ai-task-clarifier";
 import { CodexPacketPanel } from "@/components/codex-packet-panel";
 import { generateCodexPacket } from "@/lib/server/codexPacket";
 import {
@@ -99,6 +100,12 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         ) : null}
         {params?.review === "saved" ? <Notice>每日复盘已保存。</Notice> : null}
         {params?.created === "task" ? <Notice>新任务已写入 SSOT。</Notice> : null}
+        {params?.created === "ai-task" ? (
+          <Notice>AI 澄清任务已写入 SSOT。</Notice>
+        ) : null}
+        {params?.created === "ai-error" ? (
+          <Notice>AI 澄清任务写入失败，请重新生成预览。</Notice>
+        ) : null}
 
         <section className="grid gap-3 border border-zinc-800 bg-zinc-950/70 p-3">
           <SectionTitle eyebrow="01" title="Today P0" />
@@ -177,8 +184,10 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
           />
         </div>
 
+        <AiTaskClarifier />
+
         <section className="grid gap-3 border border-zinc-800 bg-black p-3">
-          <SectionTitle eyebrow="07" title="Add Task form" />
+          <SectionTitle eyebrow="07B" title="Add Task form" />
           <form action={createTaskAction} className="grid gap-3">
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               <Field label="任务标题">

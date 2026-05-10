@@ -71,3 +71,37 @@ export type UpdateTaskPatch = Partial<
 >;
 
 export type CreateReviewInput = Omit<DailyReview, "createdAt">;
+
+export type ClarifiedTaskStatus = Extract<
+  TaskStatus,
+  "inbox" | "active" | "codex_ready" | "waiting" | "frozen"
+>;
+
+export type ClarifiedTaskDraft = {
+  title: string;
+  project: string;
+  priority: TaskPriority;
+  status: ClarifiedTaskStatus;
+  codexFit: CodexFit;
+  owner: TaskOwner;
+  nextAction: string;
+  doneWhen: string;
+  riskFlags: string[];
+  doNot: string[];
+  notes: string;
+};
+
+export type AiTaskClarifierState =
+  | {
+      status: "idle";
+    }
+  | {
+      status: "success";
+      task: ClarifiedTaskDraft;
+      rawOutput: string;
+    }
+  | {
+      status: "error";
+      message: string;
+      rawOutput?: string;
+    };
