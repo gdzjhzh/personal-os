@@ -22,7 +22,7 @@ export function AiTaskClarifier() {
       <div className="flex items-center gap-2">
         <span className="text-sm text-emerald-400">07A</span>
         <h2 className="text-base font-semibold uppercase text-zinc-100">
-          AI 澄清任务
+          任务梳理
         </h2>
       </div>
 
