@@ -38,16 +38,16 @@ export function CodexPacketPanel({ packets }: CodexPacketPanelProps) {
   }
 
   if (packets.length === 0) {
-    return <p className="text-sm text-zinc-500">暂无任务可生成 Packet。</p>;
+    return <p className="text-base text-zinc-500">暂无任务可生成 Packet。</p>;
   }
 
   return (
     <div className="grid gap-3">
       <div className="flex flex-col gap-2 sm:flex-row">
-        <label className="grid gap-1 text-xs text-zinc-400 sm:min-w-80">
+        <label className="grid gap-1 text-sm text-zinc-400 sm:min-w-80">
           选择任务
           <select
-            className="border border-zinc-800 bg-black px-2 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500"
+            className="border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500"
             value={selected?.id || ""}
             onChange={(event) => {
               setSelectedId(event.target.value);
@@ -65,16 +65,16 @@ export function CodexPacketPanel({ packets }: CodexPacketPanelProps) {
           <button
             type="button"
             onClick={copyPacket}
-            className="border border-emerald-600 bg-emerald-500 px-3 py-2 text-sm font-semibold text-black hover:bg-emerald-400"
+            className="border border-emerald-600 bg-emerald-500 px-3 py-2 text-base font-semibold text-black hover:bg-emerald-400"
           >
             复制 Packet
           </button>
-          <span className="pb-2 text-xs text-zinc-500">{copyState}</span>
+          <span className="pb-2 text-sm text-zinc-500">{copyState}</span>
         </div>
       </div>
       <textarea
         ref={textAreaRef}
-        className="min-h-96 w-full resize-y border border-zinc-800 bg-black p-3 font-mono text-xs leading-5 text-zinc-200 outline-none focus:border-emerald-500"
+        className="min-h-96 w-full resize-y border border-zinc-800 bg-black p-3 font-mono text-sm leading-6 text-zinc-200 outline-none focus:border-emerald-500"
         readOnly
         value={selected?.packet || ""}
       />

@@ -83,14 +83,14 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
       <div className="mx-auto grid max-w-[1600px] gap-4">
         <header className="flex flex-col gap-2 border-b border-zinc-800 pb-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-xs uppercase text-emerald-400">
+            <p className="text-sm uppercase text-emerald-400">
               Personal SaaS OS / Active Task SSOT
             </p>
-            <h1 className="text-xl font-semibold text-zinc-50 sm:text-2xl">
+            <h1 className="text-2xl font-semibold text-zinc-50 sm:text-3xl">
               今日执行台
             </h1>
           </div>
-          <div className="text-xs text-zinc-500">
+          <div className="text-sm text-zinc-500">
             日期：{today} / 存储：data/store.json / 本地优先
           </div>
         </header>
@@ -110,7 +110,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         <section className="grid gap-3 border border-zinc-800 bg-zinc-950/70 p-3">
           <SectionTitle eyebrow="01" title="Today P0" />
           {p0 ? (
-            <div className="grid gap-2 text-sm">
+            <div className="grid gap-2 text-base">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge>{p0.priority}</Badge>
                 <span className="text-emerald-300">{p0.code}</span>
@@ -122,7 +122,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
               <KeyValue label="AI 排程建议" value={scheduleAdvice(p0Decision)} />
             </div>
           ) : (
-            <p className="text-sm text-zinc-400">
+            <p className="text-base text-zinc-400">
               当前没有 active 或 codex_ready 任务。先补齐一个可推进任务。
             </p>
           )}
@@ -131,12 +131,12 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
           <section className="grid gap-3 border border-zinc-800 bg-black p-3">
             <SectionTitle eyebrow="02" title="Minimum 25-minute action" />
-            <p className="text-sm text-emerald-300">{minimumActionFromP0(p0)}</p>
+            <p className="text-base text-emerald-300">{minimumActionFromP0(p0)}</p>
           </section>
 
           <section className="grid gap-3 border border-zinc-800 bg-black p-3">
             <SectionTitle eyebrow="03" title="Do-not-do list" />
-            <ul className="grid gap-1 text-xs text-zinc-300 sm:grid-cols-2">
+            <ul className="grid gap-1 text-sm text-zinc-300 sm:grid-cols-2">
               {DO_NOT_DO_LIST.map((item) => (
                 <li key={item} className="border-l border-zinc-700 pl-2">
                   {item}
@@ -149,7 +149,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         <section className="grid gap-3 border border-zinc-800 bg-zinc-950/70 p-3">
           <SectionTitle eyebrow="04" title="Active Task SSOT table" />
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1180px] border-collapse text-left text-xs">
+            <table className="w-full min-w-[1320px] border-collapse text-left text-sm">
               <thead className="text-zinc-500">
                 <tr className="border-y border-zinc-800">
                   <Th>优先级</Th>
@@ -317,7 +317,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
 
         <section className="grid gap-3 border border-emerald-900/80 bg-emerald-950/20 p-3">
           <SectionTitle eyebrow="10" title="Export to Obsidian / Markdown" />
-          <p className="text-xs text-zinc-400">
+          <p className="text-sm text-zinc-400">
             若设置 OBSIDIAN_VAULT_PATH，将写入 00-Daily；否则写入本项目 exports。
           </p>
           <form action={exportMarkdownAction}>
@@ -365,7 +365,7 @@ function TaskRow({ task }: { task: Task }) {
             <form key={status} action={updateTaskStatusAction}>
               <input type="hidden" name="id" value={task.id} />
               <button
-                className="border border-zinc-800 px-2 py-1 text-[11px] text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+                className="border border-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
                 name="status"
                 type="submit"
                 value={status}
@@ -375,7 +375,7 @@ function TaskRow({ task }: { task: Task }) {
             </form>
           ))}
           <a
-            className="border border-zinc-800 px-2 py-1 text-[11px] text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
+            className="border border-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500 hover:text-emerald-300"
             href="#codex-packet-generator"
           >
             generate Codex packet
@@ -402,7 +402,7 @@ function QueueSection({
         <div className="grid gap-2">
           {tasks.map((task) => (
             <div
-              className="grid gap-1 border border-zinc-900 bg-zinc-950 p-2 text-xs"
+              className="grid gap-1 border border-zinc-900 bg-zinc-950 p-2 text-sm"
               key={task.id}
             >
               <div className="flex flex-wrap gap-2">
@@ -418,7 +418,7 @@ function QueueSection({
           ))}
         </div>
       ) : (
-        <p className="text-sm text-zinc-500">暂无任务。</p>
+        <p className="text-base text-zinc-500">暂无任务。</p>
       )}
     </section>
   );
@@ -427,8 +427,8 @@ function QueueSection({
 function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-emerald-400">{eyebrow}</span>
-      <h2 className="text-sm font-semibold uppercase text-zinc-100">{title}</h2>
+      <span className="text-sm text-emerald-400">{eyebrow}</span>
+      <h2 className="text-base font-semibold uppercase text-zinc-100">{title}</h2>
     </div>
   );
 }
@@ -436,7 +436,7 @@ function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
 function KeyValue({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1 sm:grid-cols-[10rem_1fr]">
-      <span className="text-xs text-zinc-500">{label}</span>
+      <span className="text-sm text-zinc-500">{label}</span>
       <span className="text-zinc-300">{value}</span>
     </div>
   );
@@ -444,7 +444,7 @@ function KeyValue({ label, value }: { label: string; value: string }) {
 
 function Notice({ children }: { children: React.ReactNode }) {
   return (
-    <div className="border border-emerald-900 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-200">
+    <div className="border border-emerald-900 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-200">
       {children}
     </div>
   );
@@ -458,7 +458,7 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="grid gap-1 text-xs text-zinc-500">
+    <label className="grid gap-1 text-sm text-zinc-500">
       {label}
       {children}
     </label>
@@ -481,7 +481,7 @@ function Td({
 
 function Badge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex border border-emerald-700 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+    <span className="inline-flex border border-emerald-700 px-2 py-0.5 text-xs font-semibold text-emerald-300">
       {children}
     </span>
   );
@@ -572,8 +572,8 @@ function getTodayDate() {
 }
 
 const inputClassName =
-  "border border-zinc-800 bg-black px-2 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500";
+  "border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500";
 const textareaClassName =
-  "min-h-24 border border-zinc-800 bg-black px-2 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500";
+  "min-h-24 border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500";
 const primaryButtonClassName =
-  "border border-emerald-600 bg-emerald-500 px-3 py-2 text-sm font-semibold text-black hover:bg-emerald-400";
+  "border border-emerald-600 bg-emerald-500 px-3 py-2 text-base font-semibold text-black hover:bg-emerald-400";
