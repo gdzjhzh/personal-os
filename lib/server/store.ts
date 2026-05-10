@@ -2,6 +2,10 @@ import path from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 import type {
+  AiDailyReview,
+  AiWeeklyReview,
+  CreateAiDailyReviewInput,
+  CreateAiWeeklyReviewInput,
   CreateProductTeardownInput,
   CreateReviewInput,
   CreateTaskInput,
@@ -157,16 +161,68 @@ export async function getProductTeardownsByDate(date: string) {
   return store.productTeardowns.filter((teardown) => teardown.date === date);
 }
 
+export async function createAiDailyReview(input: CreateAiDailyReviewInput) {
+  const store = await readStore();
+  const review: AiDailyReview = {
+    ...input,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+  };
+
+  store.aiDailyReviews.push(review);
+  await writeStore(store);
+  return review;
+}
+
+export async function createAiWeeklyReview(input: CreateAiWeeklyReviewInput) {
+  const store = await readStore();
+  const review: AiWeeklyReview = {
+    ...input,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+  };
+
+  store.aiWeeklyReviews.push(review);
+  await writeStore(store);
+  return review;
+}
+
+export async function getAiDailyReviewByDate(date: string) {
+  const store = await readStore();
+
+  return latestByCreatedAt(
+    store.aiDailyReviews.filter((review) => review.date === date),
+  );
+}
+
+export async function getAiWeeklyReviewByRange(
+  weekStart: string,
+  weekEnd: string,
+) {
+  const store = await readStore();
+
+  return latestByCreatedAt(
+    store.aiWeeklyReviews.filter(
+      (review) =>
+        review.weekStart === weekStart && review.weekEnd === weekEnd,
+    ),
+  );
+}
+
 export async function exportDailyMarkdown(date: string) {
   const store = await readStore();
   const latestReview = [...store.reviews]
     .reverse()
     .find((review) => review.date === date);
+  const latestAiDailyReview = latestByCreatedAt(
+    store.aiDailyReviews.filter((review) => review.date === date),
+  );
   const p0Decision = chooseTodayP0(store.tasks);
   const markdown = buildDailyMarkdown({
     date,
     tasks: store.tasks,
     latestReview,
+    latestAiDailyReview,
     p0Decision,
     productTeardowns: store.productTeardowns.filter(
       (teardown) => teardown.date === date,
@@ -237,6 +293,8 @@ function createSeedStore(): Store {
     ],
     reviews: [],
     productTeardowns: [],
+    aiDailyReviews: [],
+    aiWeeklyReviews: [],
   };
 }
 
@@ -249,7 +307,17 @@ function normalizeStore(value: unknown): Store {
     productTeardowns: Array.isArray(store.productTeardowns)
       ? store.productTeardowns
       : [],
+    aiDailyReviews: Array.isArray(store.aiDailyReviews)
+      ? store.aiDailyReviews
+      : [],
+    aiWeeklyReviews: Array.isArray(store.aiWeeklyReviews)
+      ? store.aiWeeklyReviews
+      : [],
   };
+}
+
+function latestByCreatedAt<T extends { createdAt: string }>(items: T[]) {
+  return [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
 }
 
 function nextTaskCode(tasks: Task[]) {

@@ -1,7 +1,12 @@
 import path from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 
-import type { DailyReview, ProductTeardown, Task } from "@/lib/types";
+import type {
+  AiDailyReview,
+  DailyReview,
+  ProductTeardown,
+  Task,
+} from "@/lib/types";
 import {
   DO_NOT_DO_LIST,
   minimumActionFromP0,
@@ -16,6 +21,7 @@ type DailyMarkdownInput = {
   date: string;
   tasks: Task[];
   latestReview?: DailyReview;
+  latestAiDailyReview?: AiDailyReview;
   p0Decision: P0Decision;
   productTeardowns: ProductTeardown[];
 };
@@ -34,6 +40,7 @@ export function buildDailyMarkdown({
   date,
   tasks,
   latestReview,
+  latestAiDailyReview,
   p0Decision,
   productTeardowns,
 }: DailyMarkdownInput) {
@@ -83,6 +90,9 @@ ${productTeardownMarkdown(productTeardowns)}
 - 偏离标签：${latestReview?.driftFlags.join(", ") || "无"}
 - 明日 P0：${latestReview?.tomorrowP0 || "未填写"}
 - 备注：${latestReview?.notes || "无"}
+
+## AI 每日复盘
+${aiDailyReviewMarkdown(latestAiDailyReview)}
 
 ## AI 排程建议
 ${scheduleAdvice(p0Decision)}
@@ -171,6 +181,27 @@ function productTeardownMarkdown(productTeardowns: ProductTeardown[]) {
 - 备注：${singleLine(teardown.notes || "无")}`,
     )
     .join("\n\n");
+}
+
+function aiDailyReviewMarkdown(review?: AiDailyReview) {
+  if (!review) {
+    return "- 未生成 AI 每日复盘。";
+  }
+
+  return `- 今日总结：${singleLine(review.summary || "未填写")}
+- 真实产出：${singleLine(review.realOutput || "未填写")}
+- 伪忙碌：${singleLine(review.fakeProgress || "未填写")}
+- 成长信号：${listInline(review.growthSignals)}
+- 偏离警告：${listInline(review.driftWarnings)}
+- 产品判断力进展：${singleLine(review.productThinkingProgress || "未填写")}
+- 执行力进展：${singleLine(review.executionProgress || "未填写")}
+- 技术交付进展：${singleLine(review.technicalProgress || "未填写")}
+- 明日建议：${singleLine(review.nextDaySuggestion || "未填写")}
+- 评分：执行 ${review.score.execution}/5，产品判断 ${review.score.productThinking}/5，技术交付 ${review.score.technicalShipping}/5，抗偏离 ${review.score.antiDrift}/5，复盘质量 ${review.score.reviewQuality}/5`;
+}
+
+function listInline(items: string[]) {
+  return items.length > 0 ? items.map(singleLine).join("；") : "无";
 }
 
 function singleLine(value: string) {

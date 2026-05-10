@@ -75,10 +75,53 @@ export type ProductTeardown = {
   updatedAt: string;
 };
 
+export type AiDailyReview = {
+  id: string;
+  date: string;
+  summary: string;
+  realOutput: string;
+  fakeProgress: string;
+  growthSignals: string[];
+  driftWarnings: string[];
+  productThinkingProgress: string;
+  executionProgress: string;
+  technicalProgress: string;
+  nextDaySuggestion: string;
+  score: {
+    execution: number;
+    productThinking: number;
+    technicalShipping: number;
+    antiDrift: number;
+    reviewQuality: number;
+  };
+  createdAt: string;
+};
+
+export type AiWeeklyReview = {
+  id: string;
+  weekStart: string;
+  weekEnd: string;
+  summary: string;
+  mainGrowth: string[];
+  repeatedDrifts: string[];
+  productThinkingGrowth: string;
+  executionGrowth: string;
+  technicalGrowth: string;
+  strongestDay: string;
+  weakestDay: string;
+  nextWeekFocus: string;
+  stopDoing: string[];
+  keepDoing: string[];
+  startDoing: string[];
+  createdAt: string;
+};
+
 export type Store = {
   tasks: Task[];
   reviews: DailyReview[];
   productTeardowns: ProductTeardown[];
+  aiDailyReviews: AiDailyReview[];
+  aiWeeklyReviews: AiWeeklyReview[];
 };
 
 export type CreateTaskInput = {
@@ -105,6 +148,13 @@ export type CreateReviewInput = Omit<DailyReview, "createdAt">;
 export type CreateProductTeardownInput = Omit<
   ProductTeardown,
   "id" | "createdAt" | "updatedAt"
+>;
+
+export type CreateAiDailyReviewInput = Omit<AiDailyReview, "id" | "createdAt">;
+
+export type CreateAiWeeklyReviewInput = Omit<
+  AiWeeklyReview,
+  "id" | "createdAt"
 >;
 
 export type ClarifiedTaskStatus = Extract<

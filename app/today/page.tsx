@@ -3,6 +3,18 @@ import { redirect } from "next/navigation";
 
 import { AiTaskClarifier } from "@/components/ai-task-clarifier";
 import { CodexPacketPanel } from "@/components/codex-packet-panel";
+import {
+  DeepSeekRequestError,
+  MissingDeepSeekApiKeyError,
+} from "@/lib/server/ai/deepseek";
+import {
+  AiDailyReviewInvalidJsonError,
+  generateAiDailyReview,
+} from "@/lib/server/ai/dailyReviewCoach";
+import {
+  AiWeeklyReviewInvalidJsonError,
+  generateAiWeeklyReview,
+} from "@/lib/server/ai/weeklyReviewCoach";
 import { generateCodexPacket } from "@/lib/server/codexPacket";
 import {
   DO_NOT_DO_LIST,
@@ -12,6 +24,8 @@ import {
 } from "@/lib/server/scoring";
 import {
   TASK_STATUSES,
+  createAiDailyReview,
+  createAiWeeklyReview,
   createReview,
   createTask,
   exportDailyMarkdown,
@@ -19,6 +33,8 @@ import {
   updateTask,
 } from "@/lib/server/store";
 import type {
+  AiDailyReview,
+  AiWeeklyReview,
   CodexFit,
   ProductTeardown,
   Task,
@@ -34,6 +50,8 @@ type TodayPageProps = {
     exported?: string;
     review?: string;
     created?: string;
+    aiReview?: string;
+    aiReviewError?: string;
   }>;
 };
 
@@ -62,13 +80,24 @@ const codexFitLabels: Record<CodexFit, string> = {
 export default async function TodayPage({ searchParams }: TodayPageProps) {
   const params = await searchParams;
   const today = getTodayDate();
+  const { weekStart, weekEnd } = getCurrentWeekRange(today);
   const store = await readStore();
   const tasks = [...store.tasks].sort((a, b) => a.code.localeCompare(b.code));
   const p0Decision = chooseTodayP0(tasks);
   const p0 = p0Decision.task;
+  const aiReviewErrorMessage = getAiReviewErrorMessage(params?.aiReviewError);
   const latestReview = [...store.reviews]
     .reverse()
     .find((review) => review.date === today);
+  const latestAiDailyReview = latestByCreatedAt(
+    store.aiDailyReviews.filter((review) => review.date === today),
+  );
+  const latestAiWeeklyReview = latestByCreatedAt(
+    store.aiWeeklyReviews.filter(
+      (review) =>
+        review.weekStart === weekStart && review.weekEnd === weekEnd,
+    ),
+  );
   const activeTasks = tasks.filter((task) =>
     ["inbox", "active", "codex_ready", "codex_running"].includes(task.status),
   );
@@ -122,6 +151,13 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         {params?.created === "ai-error" ? (
           <Notice>AI 整理后的任务写入失败，请重新生成预览。</Notice>
         ) : null}
+        {params?.aiReview === "daily-saved" ? (
+          <Notice>AI 每日复盘已生成并保存。</Notice>
+        ) : null}
+        {params?.aiReview === "weekly-saved" ? (
+          <Notice>AI 每周复盘已生成并保存。</Notice>
+        ) : null}
+        {aiReviewErrorMessage ? <Notice>{aiReviewErrorMessage}</Notice> : null}
 
         <section className="grid gap-3 border border-emerald-900/60 bg-zinc-950/80 p-4">
           <SectionTitle eyebrow="01" title="今日 P0" />
@@ -333,8 +369,15 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
           </form>
         </section>
 
+        <AiReviewCoachSection
+          dailyReview={latestAiDailyReview}
+          weeklyReview={latestAiWeeklyReview}
+          weekStart={weekStart}
+          weekEnd={weekEnd}
+        />
+
         <section className="grid gap-3 border border-emerald-900/70 bg-emerald-950/15 p-3">
-          <SectionTitle eyebrow="12" title="导出 Markdown" />
+          <SectionTitle eyebrow="13" title="导出 Markdown" />
           <p className="text-sm text-zinc-400">
             若设置 OBSIDIAN_VAULT_PATH，将写入 00-Daily；否则写入本项目 exports。
           </p>
@@ -497,6 +540,190 @@ function ProductTeardownSummary({
   );
 }
 
+function AiReviewCoachSection({
+  dailyReview,
+  weeklyReview,
+  weekStart,
+  weekEnd,
+}: {
+  dailyReview?: AiDailyReview;
+  weeklyReview?: AiWeeklyReview;
+  weekStart: string;
+  weekEnd: string;
+}) {
+  return (
+    <section className="grid gap-3 border border-zinc-800 bg-black/80 p-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <SectionTitle eyebrow="12" title="AI 复盘教练" />
+        <div className="flex flex-wrap gap-2">
+          <form action={generateTodayAiDailyReviewAction}>
+            <button className={primaryButtonClassName} type="submit">
+              生成今日 AI 复盘
+            </button>
+          </form>
+          <form action={generateCurrentWeekAiWeeklyReviewAction}>
+            <button className={secondaryButtonClassName} type="submit">
+              生成本周 AI 复盘
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-2">
+        <AiDailyReviewCard review={dailyReview} />
+        <AiWeeklyReviewCard
+          review={weeklyReview}
+          weekStart={weekStart}
+          weekEnd={weekEnd}
+        />
+      </div>
+    </section>
+  );
+}
+
+function AiDailyReviewCard({ review }: { review?: AiDailyReview }) {
+  return (
+    <article className="grid gap-3 border border-zinc-900 bg-zinc-950 p-3 text-sm">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <h3 className="text-base font-semibold text-zinc-100">
+          今日 AI 每日复盘
+        </h3>
+        {review ? (
+          <span className="font-mono text-xs text-zinc-500">
+            {formatCreatedAt(review.createdAt)}
+          </span>
+        ) : null}
+      </div>
+
+      {review ? (
+        <div className="grid gap-3">
+          <ReviewDetail label="今日总结" value={review.summary} />
+          <ReviewDetail label="真实产出" value={review.realOutput} />
+          <ReviewDetail label="伪忙碌" value={review.fakeProgress} />
+          <ReviewList label="成长信号" items={review.growthSignals} />
+          <ReviewList label="偏离警告" items={review.driftWarnings} />
+          <ReviewDetail
+            label="产品判断力进展"
+            value={review.productThinkingProgress}
+          />
+          <ReviewDetail label="执行力进展" value={review.executionProgress} />
+          <ReviewDetail label="技术交付进展" value={review.technicalProgress} />
+          <ReviewDetail label="明日建议" value={review.nextDaySuggestion} />
+          <DailyScoreGrid review={review} />
+        </div>
+      ) : (
+        <p className="text-zinc-500">今天还未生成 AI 每日复盘。</p>
+      )}
+    </article>
+  );
+}
+
+function AiWeeklyReviewCard({
+  review,
+  weekStart,
+  weekEnd,
+}: {
+  review?: AiWeeklyReview;
+  weekStart: string;
+  weekEnd: string;
+}) {
+  return (
+    <article className="grid gap-3 border border-zinc-900 bg-zinc-950 p-3 text-sm">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <h3 className="text-base font-semibold text-zinc-100">
+          本周 AI 每周复盘
+        </h3>
+        <span className="font-mono text-xs text-zinc-500">
+          {weekStart} - {weekEnd}
+        </span>
+      </div>
+
+      {review ? (
+        <div className="grid gap-3">
+          <ReviewDetail label="本周总结" value={review.summary} />
+          <ReviewList label="主要成长" items={review.mainGrowth} />
+          <ReviewList label="重复偏离" items={review.repeatedDrifts} />
+          <ReviewDetail
+            label="产品判断力成长"
+            value={review.productThinkingGrowth}
+          />
+          <ReviewDetail label="执行力成长" value={review.executionGrowth} />
+          <ReviewDetail label="技术交付成长" value={review.technicalGrowth} />
+          <ReviewDetail label="最强一天" value={review.strongestDay} />
+          <ReviewDetail label="最弱一天" value={review.weakestDay} />
+          <ReviewDetail label="下周唯一重点" value={review.nextWeekFocus} />
+          <div className="grid gap-2 md:grid-cols-3">
+            <ReviewList label="Stop" items={review.stopDoing} />
+            <ReviewList label="Keep" items={review.keepDoing} />
+            <ReviewList label="Start" items={review.startDoing} />
+          </div>
+        </div>
+      ) : (
+        <p className="text-zinc-500">本周还未生成 AI 每周复盘。</p>
+      )}
+    </article>
+  );
+}
+
+function ReviewDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1">
+      <div className="text-xs text-zinc-500">{label}</div>
+      <div className="break-words leading-6 text-zinc-300">
+        {value || "未填写"}
+      </div>
+    </div>
+  );
+}
+
+function ReviewList({ label, items }: { label: string; items: string[] }) {
+  return (
+    <div className="grid gap-1">
+      <div className="text-xs text-zinc-500">{label}</div>
+      {items.length > 0 ? (
+        <ul className="grid gap-1 text-zinc-300">
+          {items.map((item) => (
+            <li key={item} className="border-l border-zinc-800 pl-2 leading-6">
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-zinc-500">无</p>
+      )}
+    </div>
+  );
+}
+
+function DailyScoreGrid({ review }: { review: AiDailyReview }) {
+  const scores = [
+    ["执行", review.score.execution],
+    ["产品判断", review.score.productThinking],
+    ["技术交付", review.score.technicalShipping],
+    ["抗偏离", review.score.antiDrift],
+    ["复盘质量", review.score.reviewQuality],
+  ] as const;
+
+  return (
+    <div className="grid gap-2">
+      <div className="text-xs text-zinc-500">五个评分</div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {scores.map(([label, score]) => (
+          <div
+            className="border border-zinc-800 bg-black px-2 py-2"
+            key={label}
+          >
+            <div className="text-xs text-zinc-500">{label}</div>
+            <div className="font-mono text-lg font-semibold text-emerald-300">
+              {score}/5
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <div className="flex items-center gap-2">
@@ -616,6 +843,90 @@ async function createReviewAction(formData: FormData) {
   redirect("/today?review=saved");
 }
 
+async function generateTodayAiDailyReviewAction() {
+  "use server";
+
+  const today = getTodayDate();
+  const store = await readStore();
+  const currentTasks = store.tasks.filter((task) =>
+    ["active", "codex_ready", "codex_running", "waiting", "review"].includes(
+      task.status,
+    ),
+  );
+  const touchedTasks = store.tasks.filter((task) =>
+    taskTouchesDate(task, today),
+  );
+  const completedTasks = store.tasks.filter((task) =>
+    taskCompletedOnDate(task, today),
+  );
+  const dailyReview = latestByCreatedAt(
+    store.reviews.filter((review) => review.date === today),
+  );
+  const productTeardowns = store.productTeardowns.filter(
+    (teardown) => teardown.date === today,
+  );
+
+  try {
+    const review = await generateAiDailyReview({
+      date: today,
+      tasks: uniqueTasks([...touchedTasks, ...currentTasks]),
+      completedTasks,
+      currentTasks,
+      dailyReview,
+      productTeardowns,
+      p0Decision: chooseTodayP0(store.tasks),
+    });
+
+    await createAiDailyReview({
+      ...review,
+      date: today,
+    });
+  } catch (error) {
+    redirectAiReviewError(error);
+  }
+
+  revalidatePath("/today");
+  redirect("/today?aiReview=daily-saved");
+}
+
+async function generateCurrentWeekAiWeeklyReviewAction() {
+  "use server";
+
+  const today = getTodayDate();
+  const { weekStart, weekEnd } = getCurrentWeekRange(today);
+  const store = await readStore();
+
+  try {
+    const review = await generateAiWeeklyReview({
+      weekStart,
+      weekEnd,
+      tasks: store.tasks.filter((task) =>
+        taskTouchesDateRange(task, weekStart, weekEnd),
+      ),
+      dailyReviews: store.reviews.filter((review) =>
+        isDateInRange(review.date, weekStart, weekEnd),
+      ),
+      productTeardowns: store.productTeardowns.filter((teardown) =>
+        isDateInRange(teardown.date, weekStart, weekEnd),
+      ),
+      aiDailyReviews: store.aiDailyReviews.filter((review) =>
+        isDateInRange(review.date, weekStart, weekEnd),
+      ),
+    });
+
+    await createAiWeeklyReview({
+      ...review,
+      weekStart,
+      weekEnd,
+    });
+  } catch (error) {
+    redirectAiReviewError(error);
+  }
+
+  revalidatePath("/today");
+  redirect("/today?aiReview=weekly-saved");
+}
+
 async function exportMarkdownAction(formData: FormData) {
   "use server";
 
@@ -633,7 +944,119 @@ function parseList(value: string) {
     .filter(Boolean);
 }
 
+function getAiReviewErrorMessage(error?: string) {
+  if (error === "missing-key") {
+    return "未配置 DEEPSEEK_API_KEY，无法生成 AI 复盘。";
+  }
+
+  if (error === "invalid-json") {
+    return "AI 复盘返回内容不是合法 JSON，请重试。";
+  }
+
+  if (error === "request-failed") {
+    return "AI 复盘生成失败，请检查网络、API Key 或模型配置。";
+  }
+
+  return "";
+}
+
+function redirectAiReviewError(error: unknown): never {
+  if (error instanceof MissingDeepSeekApiKeyError) {
+    redirect("/today?aiReviewError=missing-key");
+  }
+
+  if (
+    error instanceof AiDailyReviewInvalidJsonError ||
+    error instanceof AiWeeklyReviewInvalidJsonError
+  ) {
+    redirect("/today?aiReviewError=invalid-json");
+  }
+
+  if (error instanceof DeepSeekRequestError) {
+    redirect("/today?aiReviewError=request-failed");
+  }
+
+  redirect("/today?aiReviewError=request-failed");
+}
+
+function latestByCreatedAt<T extends { createdAt: string }>(items: T[]) {
+  return [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+}
+
+function uniqueTasks(tasks: Task[]) {
+  const seen = new Set<string>();
+
+  return tasks.filter((task) => {
+    if (seen.has(task.id)) {
+      return false;
+    }
+
+    seen.add(task.id);
+    return true;
+  });
+}
+
+function taskTouchesDate(task: Task, date: string) {
+  return [task.createdAt, task.updatedAt, task.completedAt].some(
+    (timestamp) => dateFromTimestamp(timestamp) === date,
+  );
+}
+
+function taskCompletedOnDate(task: Task, date: string) {
+  return (
+    dateFromTimestamp(task.completedAt) === date ||
+    (task.status === "done" && dateFromTimestamp(task.updatedAt) === date)
+  );
+}
+
+function taskTouchesDateRange(task: Task, start: string, end: string) {
+  return [task.updatedAt, task.completedAt].some((timestamp) =>
+    isDateInRange(dateFromTimestamp(timestamp), start, end),
+  );
+}
+
+function dateFromTimestamp(value?: string) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return formatAppDate(date);
+}
+
+function isDateInRange(date: string, start: string, end: string) {
+  return Boolean(date) && date >= start && date <= end;
+}
+
+function getCurrentWeekRange(date: string) {
+  const current = new Date(`${date}T00:00:00.000Z`);
+  const day = current.getUTCDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const weekStart = addDays(date, mondayOffset);
+
+  return {
+    weekStart,
+    weekEnd: addDays(weekStart, 6),
+  };
+}
+
+function addDays(date: string, days: number) {
+  const current = new Date(`${date}T00:00:00.000Z`);
+  current.setUTCDate(current.getUTCDate() + days);
+
+  return current.toISOString().slice(0, 10);
+}
+
 function getTodayDate() {
+  return formatAppDate(new Date());
+}
+
+function formatAppDate(date: Date) {
   const timeZone = process.env.APP_TIMEZONE || "Asia/Shanghai";
 
   return new Intl.DateTimeFormat("en-CA", {
@@ -641,7 +1064,11 @@ function getTodayDate() {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date());
+  }).format(date);
+}
+
+function formatCreatedAt(value: string) {
+  return value.slice(0, 16).replace("T", " ");
 }
 
 const inputClassName =
@@ -650,3 +1077,5 @@ const textareaClassName =
   "min-h-24 border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500";
 const primaryButtonClassName =
   "border border-emerald-600 bg-emerald-500 px-3 py-2 text-base font-semibold text-black hover:bg-emerald-400";
+const secondaryButtonClassName =
+  "border border-zinc-700 bg-zinc-950 px-3 py-2 text-base font-semibold text-zinc-100 hover:border-emerald-500 hover:text-emerald-300";
