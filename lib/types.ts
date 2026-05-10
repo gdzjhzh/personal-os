@@ -46,9 +46,39 @@ export type DailyReview = {
   createdAt: string;
 };
 
+export type ProductTeardownSource =
+  | "TrustMRR"
+  | "Toolify"
+  | "TAAFT"
+  | "Other";
+
+export type ProductTeardown = {
+  id: string;
+  date: string;
+  productName: string;
+  productUrl?: string;
+  source: ProductTeardownSource;
+  problem: string;
+  targetUser: string;
+  whyUsersNeedIt: string;
+  userReviews: string;
+  acquisition: string;
+  revenueSignal: string;
+  whatILearned: string;
+  hardPart: string;
+  oneSentencePitch: string;
+  alternativeApproach: string;
+  canIBuildIt: string;
+  coldStartStrategy: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Store = {
   tasks: Task[];
   reviews: DailyReview[];
+  productTeardowns: ProductTeardown[];
 };
 
 export type CreateTaskInput = {
@@ -71,6 +101,11 @@ export type UpdateTaskPatch = Partial<
 >;
 
 export type CreateReviewInput = Omit<DailyReview, "createdAt">;
+
+export type CreateProductTeardownInput = Omit<
+  ProductTeardown,
+  "id" | "createdAt" | "updatedAt"
+>;
 
 export type ClarifiedTaskStatus = Extract<
   TaskStatus,

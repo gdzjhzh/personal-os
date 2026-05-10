@@ -1,7 +1,7 @@
 import path from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 
-import type { DailyReview, Task } from "@/lib/types";
+import type { DailyReview, ProductTeardown, Task } from "@/lib/types";
 import {
   DO_NOT_DO_LIST,
   minimumActionFromP0,
@@ -17,6 +17,7 @@ type DailyMarkdownInput = {
   tasks: Task[];
   latestReview?: DailyReview;
   p0Decision: P0Decision;
+  productTeardowns: ProductTeardown[];
 };
 
 export function resolveDailyMarkdownPath(date: string) {
@@ -34,6 +35,7 @@ export function buildDailyMarkdown({
   tasks,
   latestReview,
   p0Decision,
+  productTeardowns,
 }: DailyMarkdownInput) {
   const p0 = p0Decision.task;
   const activeTasks = tasks.filter((task) =>
@@ -71,6 +73,9 @@ ${queueLines(codexReady)}
 
 ## Waiting / Review queue
 ${queueLines(waitingReview)}
+
+## 今日 3 个产品拆解
+${productTeardownMarkdown(productTeardowns)}
 
 ## Evening Review
 - 今日真实产出：${latestReview?.actualOutput || "未填写"}
@@ -138,6 +143,38 @@ function queueLines(tasks: Task[]) {
   return tasks
     .map((task) => `- ${task.code} ${task.title} [${task.status}] - ${task.nextAction}`)
     .join("\n");
+}
+
+function productTeardownMarkdown(productTeardowns: ProductTeardown[]) {
+  if (productTeardowns.length === 0) {
+    return "- 今日未记录产品拆解。";
+  }
+
+  return productTeardowns
+    .map(
+      (teardown) => `### ${singleLine(teardown.productName) || "未命名产品"}
+
+- 来源：${teardown.source}
+- 链接：${singleLine(teardown.productUrl || "无")}
+- 解决的问题：${singleLine(teardown.problem || "未填写")}
+- 用户是谁：${singleLine(teardown.targetUser || "未填写")}
+- 用户为什么需要：${singleLine(teardown.whyUsersNeedIt || "未填写")}
+- 用户评价：${singleLine(teardown.userReviews || "未填写")}
+- 如何找到用户：${singleLine(teardown.acquisition || "未填写")}
+- 收入信号：${singleLine(teardown.revenueSignal || "未填写")}
+- 我学到了什么：${singleLine(teardown.whatILearned || "未填写")}
+- 什么做法不容易：${singleLine(teardown.hardPart || "未填写")}
+- 一句话推销：${singleLine(teardown.oneSentencePitch || "未填写")}
+- 不同的方法：${singleLine(teardown.alternativeApproach || "未填写")}
+- 我能做出来吗：${singleLine(teardown.canIBuildIt || "未填写")}
+- 冷启动策略：${singleLine(teardown.coldStartStrategy || "未填写")}
+- 备注：${singleLine(teardown.notes || "无")}`,
+    )
+    .join("\n\n");
+}
+
+function singleLine(value: string) {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function escapeCell(value: string) {

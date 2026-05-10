@@ -2,8 +2,10 @@ import path from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 import type {
+  CreateProductTeardownInput,
   CreateReviewInput,
   CreateTaskInput,
+  ProductTeardown,
   Store,
   Task,
   TaskStatus,
@@ -24,7 +26,7 @@ export async function readStore(): Promise<Store> {
 
   try {
     const raw = await readFile(STORE_PATH, "utf8");
-    return JSON.parse(raw) as Store;
+    return normalizeStore(JSON.parse(raw));
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
 
@@ -40,7 +42,11 @@ export async function readStore(): Promise<Store> {
 
 export async function writeStore(store: Store) {
   await mkdir(DATA_DIR, { recursive: true });
-  await writeFile(STORE_PATH, `${JSON.stringify(store, null, 2)}\n`, "utf8");
+  await writeFile(
+    STORE_PATH,
+    `${JSON.stringify(normalizeStore(store), null, 2)}\n`,
+    "utf8",
+  );
 }
 
 export async function getTasks() {
@@ -113,6 +119,44 @@ export async function createReview(input: CreateReviewInput) {
   return review;
 }
 
+export async function createProductTeardown(input: CreateProductTeardownInput) {
+  const store = await readStore();
+  const now = new Date().toISOString();
+  const teardown: ProductTeardown = {
+    ...input,
+    id: crypto.randomUUID(),
+    date: input.date,
+    productName: input.productName.trim(),
+    productUrl: emptyToUndefined(input.productUrl),
+    source: input.source,
+    problem: input.problem.trim(),
+    targetUser: input.targetUser.trim(),
+    whyUsersNeedIt: input.whyUsersNeedIt.trim(),
+    userReviews: input.userReviews.trim(),
+    acquisition: input.acquisition.trim(),
+    revenueSignal: input.revenueSignal.trim(),
+    whatILearned: input.whatILearned.trim(),
+    hardPart: input.hardPart.trim(),
+    oneSentencePitch: input.oneSentencePitch.trim(),
+    alternativeApproach: input.alternativeApproach.trim(),
+    canIBuildIt: input.canIBuildIt.trim(),
+    coldStartStrategy: input.coldStartStrategy.trim(),
+    notes: emptyToUndefined(input.notes),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  store.productTeardowns.push(teardown);
+  await writeStore(store);
+  return teardown;
+}
+
+export async function getProductTeardownsByDate(date: string) {
+  const store = await readStore();
+
+  return store.productTeardowns.filter((teardown) => teardown.date === date);
+}
+
 export async function exportDailyMarkdown(date: string) {
   const store = await readStore();
   const latestReview = [...store.reviews]
@@ -124,6 +168,9 @@ export async function exportDailyMarkdown(date: string) {
     tasks: store.tasks,
     latestReview,
     p0Decision,
+    productTeardowns: store.productTeardowns.filter(
+      (teardown) => teardown.date === date,
+    ),
   });
   const filePath = resolveDailyMarkdownPath(date);
 
@@ -189,6 +236,19 @@ function createSeedStore(): Store {
       },
     ],
     reviews: [],
+    productTeardowns: [],
+  };
+}
+
+function normalizeStore(value: unknown): Store {
+  const store = value as Partial<Store>;
+
+  return {
+    tasks: Array.isArray(store.tasks) ? store.tasks : [],
+    reviews: Array.isArray(store.reviews) ? store.reviews : [],
+    productTeardowns: Array.isArray(store.productTeardowns)
+      ? store.productTeardowns
+      : [],
   };
 }
 

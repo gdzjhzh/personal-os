@@ -20,7 +20,7 @@ export function AiTaskClarifier() {
   return (
     <section className="grid gap-3 border border-zinc-800 bg-black/80 p-3">
       <div className="flex items-center gap-2">
-        <span className="font-mono text-xs text-emerald-400">07</span>
+        <span className="font-mono text-xs text-emerald-400">08</span>
         <h2 className="text-base font-semibold text-zinc-100">
           AI 任务梳理
         </h2>
