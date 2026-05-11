@@ -6,6 +6,7 @@ type DeepSeekMessage = {
 type DeepSeekChatCompletionOptions = {
   messages: DeepSeekMessage[];
   reasoningEffort?: DeepSeekReasoningEffort;
+  responseFormat?: "json_object";
 };
 
 type DeepSeekChatCompletionResponse = {
@@ -35,18 +36,21 @@ export class MissingDeepSeekApiKeyError extends Error {
 }
 
 export class DeepSeekRequestError extends Error {
+  details?: string;
   status?: number;
 
-  constructor(message: string, status?: number) {
+  constructor(message: string, status?: number, details?: string) {
     super(message);
     this.name = "DeepSeekRequestError";
     this.status = status;
+    this.details = details;
   }
 }
 
 export async function createDeepSeekChatCompletion({
   messages,
   reasoningEffort = readReasoningEffortFromEnv(),
+  responseFormat,
 }: DeepSeekChatCompletionOptions) {
   const apiKey =
     process.env.DEEPSEEK_API_KEY?.trim() || process.env.PSOS_AI_API_KEY?.trim();
@@ -69,14 +73,20 @@ export async function createDeepSeekChatCompletion({
       messages,
       thinking: { type: "enabled" },
       reasoning_effort: reasoningEffort,
+      ...(responseFormat
+        ? { response_format: { type: responseFormat } }
+        : {}),
       stream: false,
     }),
   });
 
   if (!response.ok) {
+    const errorText = await response.text();
+
     throw new DeepSeekRequestError(
       `DeepSeek request failed with ${response.status}`,
       response.status,
+      readDeepSeekErrorMessage(errorText),
     );
   }
 
@@ -115,4 +125,23 @@ function currentDeepSeekModel() {
 
 function readReasoningEffortFromEnv(): DeepSeekReasoningEffort {
   return process.env.DEEPSEEK_REASONING_EFFORT === "max" ? "max" : "high";
+}
+
+function readDeepSeekErrorMessage(value: string) {
+  try {
+    const parsed = JSON.parse(value) as {
+      error?: {
+        code?: string;
+        message?: string;
+        type?: string;
+      };
+    };
+    const error = parsed.error;
+
+    return [error?.code, error?.type, error?.message]
+      .filter(Boolean)
+      .join(" / ");
+  } catch {
+    return value.slice(0, 240);
+  }
 }

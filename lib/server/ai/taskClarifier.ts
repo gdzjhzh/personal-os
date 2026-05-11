@@ -71,6 +71,7 @@ export async function clarifyTask(
   try {
     const rawOutput = await createDeepSeekChatCompletion({
       reasoningEffort: input.reasoningEffort,
+      responseFormat: "json_object",
       messages: [
         {
           role: "system",
@@ -107,9 +108,25 @@ export async function clarifyTask(
         );
       }
 
+      if (error.status === 402) {
+        throw new TaskClarifierError(
+          "request_failed",
+          "DeepSeek 账户余额不足或额度不可用，请检查账户余额后重试。",
+        );
+      }
+
+      if (error.status === 400) {
+        throw new TaskClarifierError(
+          "request_failed",
+          `DeepSeek 拒绝了请求参数：${error.details || "请检查模型和整理等级配置。"}`,
+        );
+      }
+
       throw new TaskClarifierError(
         "request_failed",
-        "AI 请求失败，请检查网络、API Key 或模型配置。",
+        `AI 请求失败（DeepSeek ${error.status ?? "未知错误"}）：${
+          error.details || "请检查网络、API Key 或模型配置。"
+        }`,
       );
     }
 

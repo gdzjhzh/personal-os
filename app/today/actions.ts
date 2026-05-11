@@ -74,7 +74,7 @@ export async function clarifyTaskAction(
       rawOutput: result.rawOutput,
     };
   } catch (error) {
-    if (error instanceof TaskClarifierError) {
+    if (isTaskClarifierError(error)) {
       return {
         status: "error",
         message: error.message,
@@ -87,6 +87,28 @@ export async function clarifyTaskAction(
       message: "AI 请求失败，请检查网络、API Key 或模型配置。",
     };
   }
+}
+
+function isTaskClarifierError(error: unknown): error is TaskClarifierError {
+  if (error instanceof TaskClarifierError) {
+    return true;
+  }
+
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const candidate = error as {
+    code?: unknown;
+    message?: unknown;
+  };
+
+  return (
+    typeof candidate.message === "string" &&
+    (candidate.code === "missing_api_key" ||
+      candidate.code === "invalid_json" ||
+      candidate.code === "request_failed")
+  );
 }
 
 function readReasoningEffort(formData: FormData): DeepSeekReasoningEffort {
