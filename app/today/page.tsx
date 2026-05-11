@@ -586,6 +586,8 @@ function TaskPool({ tasks, today }: { tasks: Task[]; today: string }) {
     title: string;
     description: string;
     tasks: Task[];
+    collapsed?: boolean;
+    hideCodexPacket?: boolean;
     muted?: boolean;
   }> = [
     {
@@ -607,6 +609,8 @@ function TaskPool({ tasks, today }: { tasks: Task[]; today: string }) {
       title: "已完成 / 已放弃",
       description: "保留结果和历史状态，默认弱化显示。",
       tasks: completedTasks,
+      collapsed: true,
+      hideCodexPacket: true,
       muted: true,
     },
   ];
@@ -621,28 +625,64 @@ function TaskPool({ tasks, today }: { tasks: Task[]; today: string }) {
           任务池是全量任务 SSOT；四象限只决定今天的摆放位置。
         </p>
         {tasks.length > 0 ? (
-          groups.map((group) => (
-            <section
-              className={group.muted ? "grid gap-2 opacity-70" : "grid gap-2"}
-              key={group.title}
-            >
-              <div className="grid gap-1">
-                <h3 className="text-sm font-semibold text-zinc-300">
-                  {group.title}
-                </h3>
-                <p className="text-xs text-zinc-600">{group.description}</p>
-              </div>
-              {group.tasks.length > 0 ? (
+          groups.map((group) => {
+            const groupClassName = group.muted
+              ? "grid gap-2 opacity-70"
+              : "grid gap-2";
+            const groupContent =
+              group.tasks.length > 0 ? (
                 <div className="grid gap-2">
                   {group.tasks.map((task) => (
-                    <TaskPoolItem key={task.id} task={task} today={today} />
+                    <TaskPoolItem
+                      hideCodexPacket={group.hideCodexPacket}
+                      key={task.id}
+                      task={task}
+                      today={today}
+                    />
                   ))}
                 </div>
               ) : (
                 <EmptyState>暂无任务。</EmptyState>
-              )}
-            </section>
-          ))
+              );
+
+            if (group.collapsed) {
+              return (
+                <details
+                  className="border border-zinc-900 bg-black/30 p-3 opacity-70"
+                  key={group.title}
+                >
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="grid gap-1">
+                        <h3 className="text-sm font-semibold text-zinc-300">
+                          {group.title}（{group.tasks.length}）
+                        </h3>
+                        <p className="text-xs text-zinc-600">
+                          {group.description}
+                        </p>
+                      </div>
+                      <span className="text-xs font-medium text-emerald-400">
+                        点击查看列表
+                      </span>
+                    </div>
+                  </summary>
+                  <div className="mt-3">{groupContent}</div>
+                </details>
+              );
+            }
+
+            return (
+              <section className={groupClassName} key={group.title}>
+                <div className="grid gap-1">
+                  <h3 className="text-sm font-semibold text-zinc-300">
+                    {group.title}（{group.tasks.length}）
+                  </h3>
+                  <p className="text-xs text-zinc-600">{group.description}</p>
+                </div>
+                {groupContent}
+              </section>
+            );
+          })
         ) : (
           <EmptyState>任务池为空。</EmptyState>
         )}
@@ -651,9 +691,19 @@ function TaskPool({ tasks, today }: { tasks: Task[]; today: string }) {
   );
 }
 
-function TaskPoolItem({ task, today }: { task: Task; today: string }) {
+function TaskPoolItem({
+  hideCodexPacket = false,
+  task,
+  today,
+}: {
+  hideCodexPacket?: boolean;
+  task: Task;
+  today: string;
+}) {
   const plannedToday = isPlannedForToday(task, today);
   const displayQuadrant = getDisplayQuadrant(task);
+  const canGenerateCodexPacket =
+    !hideCodexPacket && !["done", "dropped"].includes(task.status);
 
   return (
     <article className="grid gap-3 border border-zinc-900 bg-zinc-950 p-3 text-sm">
@@ -741,16 +791,18 @@ function TaskPoolItem({ task, today }: { task: Task; today: string }) {
         ))}
       </div>
 
-      <details className="group border-t border-zinc-900 pt-2">
-        <summary className="cursor-pointer text-sm font-medium text-emerald-300 hover:text-emerald-200">
-          生成 Codex 指令
-        </summary>
-        <textarea
-          className="mt-2 min-h-64 w-full resize-y border border-zinc-800 bg-black p-3 font-mono text-xs leading-5 text-zinc-300 outline-none focus:border-emerald-500"
-          readOnly
-          value={generateCodexPacket(task)}
-        />
-      </details>
+      {canGenerateCodexPacket ? (
+        <details className="group border-t border-zinc-900 pt-2">
+          <summary className="cursor-pointer text-sm font-medium text-emerald-300 hover:text-emerald-200">
+            生成 Codex 指令
+          </summary>
+          <textarea
+            className="mt-2 min-h-64 w-full resize-y border border-zinc-800 bg-black p-3 font-mono text-xs leading-5 text-zinc-300 outline-none focus:border-emerald-500"
+            readOnly
+            value={generateCodexPacket(task)}
+          />
+        </details>
+      ) : null}
     </article>
   );
 }
