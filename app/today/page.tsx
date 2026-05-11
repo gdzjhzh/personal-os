@@ -702,8 +702,9 @@ function TaskPoolItem({
 }) {
   const plannedToday = isPlannedForToday(task, today);
   const displayQuadrant = getDisplayQuadrant(task);
+  const isClosedTask = ["done", "dropped"].includes(task.status);
   const canGenerateCodexPacket =
-    !hideCodexPacket && !["done", "dropped"].includes(task.status);
+    !hideCodexPacket && !isClosedTask;
 
   return (
     <article className="grid gap-3 border border-zinc-900 bg-zinc-950 p-3 text-sm">
@@ -765,31 +766,33 @@ function TaskPoolItem({
         />
       </dl>
 
-      <div className="flex flex-wrap gap-1.5">
-        {quadrants.map((quadrant) => (
-          <form
-            action={
-              plannedToday ? moveTaskQuadrantAction : planTaskForTodayAction
-            }
-            key={quadrant.id}
-          >
-            <input type="hidden" name="id" value={task.id} />
-            <input type="hidden" name="today" value={today} />
-            <button
-              className={
-                plannedToday && displayQuadrant === quadrant.id
-                  ? activeActionButtonClassName
-                  : actionButtonClassName
+      {!isClosedTask ? (
+        <div className="flex flex-wrap gap-1.5">
+          {quadrants.map((quadrant) => (
+            <form
+              action={
+                plannedToday ? moveTaskQuadrantAction : planTaskForTodayAction
               }
-              name="quadrant"
-              type="submit"
-              value={quadrant.id}
+              key={quadrant.id}
             >
-              {plannedToday ? "移到" : "加入今日"} {quadrantLabel(quadrant.id)}
-            </button>
-          </form>
-        ))}
-      </div>
+              <input type="hidden" name="id" value={task.id} />
+              <input type="hidden" name="today" value={today} />
+              <button
+                className={
+                  plannedToday && displayQuadrant === quadrant.id
+                    ? activeActionButtonClassName
+                    : actionButtonClassName
+                }
+                name="quadrant"
+                type="submit"
+                value={quadrant.id}
+              >
+                {plannedToday ? "移到" : "加入今日"} {quadrantLabel(quadrant.id)}
+              </button>
+            </form>
+          ))}
+        </div>
+      ) : null}
 
       {canGenerateCodexPacket ? (
         <details className="group border-t border-zinc-900 pt-2">
