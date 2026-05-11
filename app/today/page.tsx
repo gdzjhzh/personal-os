@@ -772,14 +772,14 @@ function ManualReviewSection({
   return (
     <section className="grid gap-3 border border-zinc-800 bg-black/80 p-4">
       <SectionTitle title="手动复盘" />
-      <form action={createReviewAction} className="grid gap-3">
+      <form action={createReviewAction} className="grid gap-4">
         <input type="hidden" name="date" value={today} />
         <input type="hidden" name="plannedP0" value={currentP0?.id || ""} />
 
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           <Field label="今日真实产出">
             <textarea
-              className={textareaClassName}
+              className={reviewTextareaClassName}
               name="actualOutput"
               defaultValue={latestReview?.actualOutput}
             />
@@ -787,42 +787,49 @@ function ManualReviewSection({
 
           <Field label="今日产出证据 / 备注">
             <textarea
-              className={textareaClassName}
+              className={reviewTextareaClassName}
               name="notes"
               defaultValue={latestReview?.notes}
             />
-            <p className="text-xs leading-5 text-zinc-500">
-              产出证据 = 能证明今天真的做出了东西的内容，例如 commit、文件、截图、demo、产品拆解、Codex 输出、用户反馈。
-            </p>
-            <p className="border-l border-amber-700 pl-2 text-xs leading-5 text-amber-200">
-              没有产出证据的复盘，容易变成自我感觉良好。
-            </p>
           </Field>
+        </div>
 
+        <div className="grid gap-1 border border-zinc-900 bg-zinc-950/50 px-3 py-2 text-xs leading-5">
+          <p className="text-zinc-500">
+            产出证据 = 能证明今天真的做出了东西的内容，例如 commit、文件、截图、demo、产品拆解、Codex 输出、用户反馈。
+          </p>
+          <p className="border-l border-amber-700 pl-2 text-amber-200">
+            没有产出证据的复盘，容易变成自我感觉良好。
+          </p>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
           <Field label="今日伪忙碌">
             <textarea
-              className={textareaClassName}
+              className={reviewTextareaClassName}
               name="fakeProgress"
               defaultValue={latestReview?.fakeProgress}
             />
           </Field>
 
-          <Field label="偏离标签">
-            <input
-              className={inputClassName}
-              name="driftFlags"
-              defaultValue={latestReview?.driftFlags.join(", ")}
-              placeholder="逗号分隔，例如 泛学习, 信息刷屏"
-            />
-          </Field>
+          <div className="grid content-start gap-4">
+            <Field label="偏离标签">
+              <input
+                className={inputClassName}
+                name="driftFlags"
+                defaultValue={latestReview?.driftFlags.join(", ")}
+                placeholder="逗号分隔，例如 泛学习, 信息刷屏"
+              />
+            </Field>
 
-          <Field label="明日 P0">
-            <input
-              className={inputClassName}
-              name="tomorrowP0"
-              defaultValue={latestReview?.tomorrowP0}
-            />
-          </Field>
+            <Field label="明日 P0">
+              <input
+                className={inputClassName}
+                name="tomorrowP0"
+                defaultValue={latestReview?.tomorrowP0}
+              />
+            </Field>
+          </div>
         </div>
 
         <div className="flex justify-end">
@@ -1583,6 +1590,8 @@ const inputClassName =
   "border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500";
 const textareaClassName =
   "min-h-28 border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500";
+const reviewTextareaClassName =
+  "min-h-40 resize-y border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500";
 const primaryButtonClassName =
   "border border-emerald-600 bg-emerald-500 px-3 py-2 text-base font-semibold text-black hover:bg-emerald-400";
 const secondaryButtonClassName =
