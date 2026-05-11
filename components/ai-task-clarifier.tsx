@@ -18,12 +18,14 @@ export function AiTaskClarifier() {
   );
 
   return (
-    <section className="grid gap-3 border border-zinc-800 bg-black/80 p-3">
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-xs text-emerald-400">09</span>
+    <section className="grid gap-3 border border-zinc-800 bg-black/80 p-4">
+      <div className="grid gap-1">
         <h2 className="text-base font-semibold text-zinc-100">
-          AI 任务梳理
+          AI 整理模糊任务
         </h2>
+        <p className="text-sm text-zinc-500">
+          把模糊想法整理成可执行任务，写入今日任务或任务池。
+        </p>
       </div>
 
       <form action={formAction} className="grid gap-3">
@@ -107,8 +109,11 @@ function ClarifiedPreview({
           <p className="text-sm text-zinc-500">任务预览</p>
           <h3 className="text-base font-semibold text-zinc-100">{task.title}</h3>
         </div>
-        <form action={saveClarifiedTaskAction}>
+        <form action={saveClarifiedTaskAction} className="grid gap-2">
           <input type="hidden" name="taskJson" value={JSON.stringify(task)} />
+          <p className="max-w-xs text-xs leading-5 text-zinc-500">
+            写入后会进入今日任务，并按优先级和风险自动放入四象限。
+          </p>
           <SaveButton />
         </form>
       </div>

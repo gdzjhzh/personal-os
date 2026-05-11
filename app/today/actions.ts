@@ -21,6 +21,7 @@ import type {
   EvidenceType,
   TaskOwner,
   TaskPriority,
+  TaskQuadrant,
 } from "@/lib/types";
 
 const priorities: TaskPriority[] = ["P0", "P1", "P2"];
@@ -92,12 +93,27 @@ function readReasoningEffort(formData: FormData): DeepSeekReasoningEffort {
   return formData.get("reasoningEffort") === "max" ? "max" : "high";
 }
 
+function inferQuadrantFromPriorityAndRiskFlags(
+  priority: TaskPriority,
+  riskFlags: string[],
+): TaskQuadrant {
+  const hasLowValueRisk = riskFlags.some(
+    (flag) => flag.includes("泛学习") || flag.includes("信息刷屏"),
+  );
+
+  if (hasLowValueRisk) {
+    return "not_urgent_not_important";
+  }
+
+  return priority === "P0" ? "important_urgent" : "important_not_urgent";
+}
+
 export async function saveClarifiedTaskAction(formData: FormData) {
   const taskJson = String(formData.get("taskJson") || "");
   const task = parseClarifiedTaskDraft(taskJson);
 
   if (!task) {
-    redirect("/today?created=ai-error");
+    redirect("/today?view=new-task&created=ai-error");
   }
 
   await createTask({
@@ -112,10 +128,15 @@ export async function saveClarifiedTaskAction(formData: FormData) {
     riskFlags: task.riskFlags,
     doNot: task.doNot,
     notes: task.notes,
+    plannedFor: getTodayDate(),
+    quadrant: inferQuadrantFromPriorityAndRiskFlags(
+      task.priority,
+      task.riskFlags,
+    ),
   });
 
   revalidatePath("/today");
-  redirect("/today?created=ai-task");
+  redirect("/today?view=tasks&created=ai-task");
 }
 
 function parseClarifiedTaskDraft(value: string): ClarifiedTaskDraft | null {

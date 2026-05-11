@@ -2,6 +2,7 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { AiTaskClarifier } from "@/components/ai-task-clarifier";
 import { generateCodexPacket } from "@/lib/server/codexPacket";
 import {
   DeepSeekRequestError,
@@ -19,6 +20,7 @@ import { chooseTodayP0 } from "@/lib/server/scoring";
 import {
   createAiDailyReview,
   createAiWeeklyReview,
+  createTask,
   createReview,
   exportDailyMarkdown,
   readStore,
@@ -28,6 +30,7 @@ import {
 import type {
   AiDailyReview,
   AiWeeklyReview,
+  CodexFit,
   DailyReview,
   Task,
   TaskPriority,
@@ -44,6 +47,7 @@ type TodayPageProps = {
     review?: string;
     aiReview?: string;
     aiReviewError?: string;
+    created?: string;
     exported?: string;
   }>;
 };
@@ -51,6 +55,14 @@ type TodayPageProps = {
 type TodayView = "tasks" | "review" | "new-task";
 
 const priorities: TaskPriority[] = ["P0", "P1", "P2"];
+const manualTaskStatuses: TaskStatus[] = [
+  "inbox",
+  "active",
+  "codex_ready",
+  "waiting",
+  "frozen",
+];
+const codexFits: CodexFit[] = ["high", "medium", "low", "none"];
 
 const legacyTodayStatuses: TaskStatus[] = [
   "active",
@@ -77,6 +89,13 @@ const statusLabels: Record<TaskStatus, string> = {
   frozen: "冻结",
   done: "完成",
   dropped: "放弃",
+};
+
+const codexFitLabels: Record<CodexFit, string> = {
+  high: "高",
+  medium: "中",
+  low: "低",
+  none: "无",
 };
 
 const quadrants: Array<{
@@ -181,12 +200,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
             />
           ) : null}
 
-          {view === "new-task" ? (
-            <PlaceholderView
-              title="AI 任务梳理将在下一步实现"
-              description="本次不实现新增任务梳理或自动化，只保留入口。"
-            />
-          ) : null}
+          {view === "new-task" ? <NewTaskView today={today} /> : null}
         </div>
       </div>
     </main>
@@ -225,6 +239,138 @@ function TodayTasksView({
       />
       <TaskPool tasks={taskPool} today={today} />
     </div>
+  );
+}
+
+function NewTaskView({ today }: { today: string }) {
+  return (
+    <div className="grid gap-4">
+      <AiTaskClarifier />
+      <ManualTaskSection today={today} />
+    </div>
+  );
+}
+
+function ManualTaskSection({ today }: { today: string }) {
+  return (
+    <section className="grid gap-4 border border-zinc-800 bg-black/80 p-4">
+      <div className="grid gap-1">
+        <SectionTitle title="手动新增任务" />
+        <p className="text-sm text-zinc-500">
+          直接写入一条可执行任务，可加入今日四象限，也可先放入任务池。
+        </p>
+      </div>
+
+      <form action={createTaskAction} className="grid gap-4">
+        <input type="hidden" name="today" value={today} />
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="任务标题">
+            <input
+              className={inputClassName}
+              name="title"
+              placeholder="例如：完成今日任务页面收尾验证"
+              required
+            />
+          </Field>
+          <Field label="项目">
+            <input
+              className={inputClassName}
+              name="project"
+              defaultValue="Personal SaaS OS"
+            />
+          </Field>
+          <Field label="优先级">
+            <select className={inputClassName} name="priority" defaultValue="P2">
+              {priorities.map((priority) => (
+                <option key={priority} value={priority}>
+                  {priority}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="状态">
+            <select className={inputClassName} name="status" defaultValue="inbox">
+              {manualTaskStatuses.map((status) => (
+                <option key={status} value={status}>
+                  {statusLabels[status]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Codex 适配度">
+            <select
+              className={inputClassName}
+              name="codexFit"
+              defaultValue="medium"
+            >
+              {codexFits.map((fit) => (
+                <option key={fit} value={fit}>
+                  {codexFitLabels[fit]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="风险标签">
+            <input
+              className={inputClassName}
+              name="riskFlags"
+              placeholder="例如：泛学习, 信息刷屏"
+            />
+          </Field>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="下一步">
+            <textarea
+              className={textareaClassName}
+              name="nextAction"
+              placeholder="写清楚下一次打开任务时立刻做什么"
+              required
+            />
+          </Field>
+          <Field label="完成标准">
+            <textarea
+              className={textareaClassName}
+              name="doneWhen"
+              placeholder="写清楚怎样算完成，最好可检查"
+              required
+            />
+          </Field>
+        </div>
+
+        <div className="grid gap-3 border border-zinc-900 bg-zinc-950/60 p-3 md:grid-cols-[minmax(0,1fr)_18rem]">
+          <label className="flex items-center gap-2 text-sm text-zinc-300">
+            <input
+              className="h-4 w-4 accent-emerald-500"
+              type="checkbox"
+              name="planForToday"
+              defaultChecked
+            />
+            加入今日任务
+          </label>
+          <Field label="四象限">
+            <select
+              className={inputClassName}
+              name="quadrant"
+              defaultValue="important_not_urgent"
+            >
+              {quadrants.map((quadrant) => (
+                <option key={quadrant.id} value={quadrant.id}>
+                  {quadrant.title}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        <div>
+          <button className={primaryButtonClassName} type="submit">
+            写入任务
+          </button>
+        </div>
+      </form>
+    </section>
   );
 }
 
@@ -893,23 +1039,6 @@ function DailyScoreGrid({ review }: { review: AiDailyReview }) {
   );
 }
 
-function PlaceholderView({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  return (
-    <section className="grid min-h-64 place-items-center border border-zinc-800 bg-black/80 p-6 text-center">
-      <div className="grid gap-2">
-        <h2 className="text-xl font-semibold text-zinc-50">{title}</h2>
-        <p className="text-sm text-zinc-500">{description}</p>
-      </div>
-    </section>
-  );
-}
-
 function SectionTitle({ title }: { title: string }) {
   return <h2 className="text-base font-semibold text-zinc-100">{title}</h2>;
 }
@@ -983,6 +1112,38 @@ async function updateTaskStatusAction(formData: FormData) {
 
   await updateTask(id, { status });
   revalidatePath("/today");
+}
+
+async function createTaskAction(formData: FormData) {
+  "use server";
+
+  const title = getFormValue(formData, "title").trim();
+
+  if (!title) {
+    return;
+  }
+
+  const today = getFormValue(formData, "today") || getTodayDate();
+  const shouldPlanForToday = formData.get("planForToday") === "on";
+  const quadrant =
+    parseQuadrant(getFormValue(formData, "quadrant")) ||
+    "important_not_urgent";
+
+  await createTask({
+    title,
+    project: getFormValue(formData, "project") || "Personal SaaS OS",
+    priority: parsePriority(getFormValue(formData, "priority")),
+    status: parseTaskStatus(getFormValue(formData, "status")),
+    codexFit: parseCodexFit(getFormValue(formData, "codexFit")),
+    nextAction: getFormValue(formData, "nextAction"),
+    doneWhen: getFormValue(formData, "doneWhen"),
+    riskFlags: parseList(getFormValue(formData, "riskFlags")),
+    plannedFor: shouldPlanForToday ? today : undefined,
+    quadrant: shouldPlanForToday ? quadrant : undefined,
+  });
+
+  revalidatePath("/today");
+  redirect("/today?view=tasks&created=task");
 }
 
 async function createReviewAction(formData: FormData) {
@@ -1145,9 +1306,22 @@ function getNotices(params?: {
   review?: string;
   aiReview?: string;
   aiReviewError?: string;
+  created?: string;
   exported?: string;
 }) {
   const notices: string[] = [];
+
+  if (params?.created === "task") {
+    notices.push("新任务已写入任务。");
+  }
+
+  if (params?.created === "ai-task") {
+    notices.push("AI 整理后的任务已写入任务。");
+  }
+
+  if (params?.created === "ai-error") {
+    notices.push("AI 整理后的任务写入失败，请重新生成预览。");
+  }
 
   if (params?.review === "saved") {
     notices.push("每日复盘已保存。");
@@ -1215,6 +1389,24 @@ function parseView(value?: string): TodayView {
   }
 
   return "tasks";
+}
+
+function parsePriority(value: string): TaskPriority {
+  const priority = value as TaskPriority;
+
+  return priorities.includes(priority) ? priority : "P2";
+}
+
+function parseTaskStatus(value: string): TaskStatus {
+  const status = value as TaskStatus;
+
+  return manualTaskStatuses.includes(status) ? status : "inbox";
+}
+
+function parseCodexFit(value: string): CodexFit {
+  const codexFit = value as CodexFit;
+
+  return codexFits.includes(codexFit) ? codexFit : "medium";
 }
 
 function parseQuadrant(value: string): TaskQuadrant | null {
