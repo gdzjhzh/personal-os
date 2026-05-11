@@ -83,6 +83,8 @@ export async function createTask(input: CreateTaskInput) {
     riskFlags: input.riskFlags || [],
     waitingFor: emptyToUndefined(input.waitingFor),
     notes: emptyToUndefined(input.notes),
+    quadrant: input.quadrant,
+    plannedFor: emptyToUndefined(input.plannedFor),
     createdAt: now,
     updatedAt: now,
   };

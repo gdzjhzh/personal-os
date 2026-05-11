@@ -1,5 +1,11 @@
 export type TaskPriority = "P0" | "P1" | "P2";
 
+export type TaskQuadrant =
+  | "important_urgent"
+  | "important_not_urgent"
+  | "urgent_not_important"
+  | "not_urgent_not_important";
+
 export type TaskStatus =
   | "inbox"
   | "active"
@@ -30,6 +36,8 @@ export type Task = {
   riskFlags: string[];
   waitingFor?: string;
   notes?: string;
+  quadrant?: TaskQuadrant;
+  plannedFor?: string;
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
@@ -184,6 +192,8 @@ export type CreateTaskInput = {
   riskFlags?: string[];
   waitingFor?: string;
   notes?: string;
+  quadrant?: TaskQuadrant;
+  plannedFor?: string;
 };
 
 export type UpdateTaskPatch = Partial<
