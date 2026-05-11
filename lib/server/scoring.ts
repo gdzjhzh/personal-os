@@ -15,7 +15,7 @@ export const DO_NOT_DO_LIST = [
   "不做和当前 P0 无关的泛学习",
 ];
 
-export function isConcreteAction(value: string) {
+function isConcreteAction(value: string) {
   const text = value.trim();
 
   if (text.length < 8) {

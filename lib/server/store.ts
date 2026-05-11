@@ -6,20 +6,14 @@ import type {
   AiWeeklyReview,
   CreateAiDailyReviewInput,
   CreateAiWeeklyReviewInput,
-  CreateCodexRunInput,
-  CreateEvidenceInput,
   CreateProductTeardownInput,
   CreateReviewInput,
   CreateTaskInput,
-  CodexRun,
-  Evidence,
   OperatingContext,
   ProductTeardown,
   Store,
   Task,
   TaskStatus,
-  UpdateCodexRunPatch,
-  UpdateOperatingContextInput,
   UpdateTaskPatch,
 } from "@/lib/types";
 import { chooseTodayP0 } from "@/lib/server/scoring";
@@ -51,18 +45,13 @@ export async function readStore(): Promise<Store> {
   }
 }
 
-export async function writeStore(store: Store) {
+async function writeStore(store: Store) {
   await mkdir(DATA_DIR, { recursive: true });
   await writeFile(
     STORE_PATH,
     `${JSON.stringify(normalizeStore(store), null, 2)}\n`,
     "utf8",
   );
-}
-
-export async function getTasks() {
-  const store = await readStore();
-  return store.tasks;
 }
 
 export async function createTask(input: CreateTaskInput) {
@@ -196,28 +185,6 @@ export async function createAiWeeklyReview(input: CreateAiWeeklyReviewInput) {
   return review;
 }
 
-export async function getAiDailyReviewByDate(date: string) {
-  const store = await readStore();
-
-  return latestByCreatedAt(
-    store.aiDailyReviews.filter((review) => review.date === date),
-  );
-}
-
-export async function getAiWeeklyReviewByRange(
-  weekStart: string,
-  weekEnd: string,
-) {
-  const store = await readStore();
-
-  return latestByCreatedAt(
-    store.aiWeeklyReviews.filter(
-      (review) =>
-        review.weekStart === weekStart && review.weekEnd === weekEnd,
-    ),
-  );
-}
-
 export async function exportDailyMarkdown(date: string) {
   const store = await readStore();
   const latestReview = [...store.reviews]
@@ -246,95 +213,6 @@ export async function exportDailyMarkdown(date: string) {
   await upsertGeneratedBlock(filePath, markdown);
 
   return filePath;
-}
-
-export async function createCodexRun(input: CreateCodexRunInput) {
-  const store = await readStore();
-  const now = new Date().toISOString();
-  const run: CodexRun = {
-    ...input,
-    id: crypto.randomUUID(),
-    date: input.date,
-    taskId: emptyToUndefined(input.taskId),
-    title: input.title.trim(),
-    prompt: input.prompt.trim(),
-    expectedOutput: input.expectedOutput.trim(),
-    actualOutput: input.actualOutput.trim(),
-    status: input.status,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  store.codexRuns.push(run);
-  await writeStore(store);
-  return run;
-}
-
-export async function updateCodexRun(id: string, patch: UpdateCodexRunPatch) {
-  const store = await readStore();
-  const index = store.codexRuns.findIndex((run) => run.id === id);
-
-  if (index === -1) {
-    throw new Error(`Codex run not found: ${id}`);
-  }
-
-  const current = store.codexRuns[index];
-  const next: CodexRun = {
-    ...current,
-    ...patch,
-    taskId: patch.taskId === undefined ? current.taskId : emptyToUndefined(patch.taskId),
-    title: patch.title?.trim() || current.title,
-    prompt: patch.prompt?.trim() || current.prompt,
-    expectedOutput: patch.expectedOutput?.trim() || current.expectedOutput,
-    actualOutput:
-      patch.actualOutput === undefined
-        ? current.actualOutput
-        : patch.actualOutput.trim(),
-    updatedAt: new Date().toISOString(),
-  };
-
-  store.codexRuns[index] = next;
-  await writeStore(store);
-  return next;
-}
-
-export async function createEvidence(input: CreateEvidenceInput) {
-  const store = await readStore();
-  const now = new Date().toISOString();
-  const evidence: Evidence = {
-    ...input,
-    id: crypto.randomUUID(),
-    date: input.date,
-    title: input.title.trim(),
-    description: input.description.trim(),
-    artifactUrl: emptyToUndefined(input.artifactUrl),
-    taskId: emptyToUndefined(input.taskId),
-    codexRunId: emptyToUndefined(input.codexRunId),
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  store.evidence.push(evidence);
-  await writeStore(store);
-  return evidence;
-}
-
-export async function updateOperatingContext(
-  input: UpdateOperatingContextInput,
-) {
-  const store = await readStore();
-  const operatingContext: OperatingContext = {
-    northStar: input.northStar.trim(),
-    currentFocus: input.currentFocus.trim(),
-    activeConstraints: input.activeConstraints,
-    antiGoals: input.antiGoals,
-    principles: input.principles,
-    updatedAt: new Date().toISOString(),
-  };
-
-  store.operatingContext = operatingContext;
-  await writeStore(store);
-  return operatingContext;
 }
 
 function createSeedStore(): Store {

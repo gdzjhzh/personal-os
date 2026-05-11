@@ -137,7 +137,7 @@ export async function clarifyTask(
   }
 }
 
-export function parseClarifiedTask(
+function parseClarifiedTask(
   rawOutput: string,
   input: ClarifyTaskInput = { rawTask: "" },
 ) {

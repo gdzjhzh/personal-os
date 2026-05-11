@@ -5,20 +5,12 @@ import { redirect } from "next/navigation";
 
 import type { DeepSeekReasoningEffort } from "@/lib/server/ai/deepseek";
 import { clarifyTask, TaskClarifierError } from "@/lib/server/ai/taskClarifier";
-import {
-  createCodexRun,
-  createEvidence,
-  createTask,
-  updateCodexRun,
-  updateOperatingContext,
-} from "@/lib/server/store";
+import { createTask } from "@/lib/server/store";
 import type {
   AiTaskClarifierState,
   ClarifiedTaskDraft,
   ClarifiedTaskStatus,
   CodexFit,
-  CodexRunStatus,
-  EvidenceType,
   TaskOwner,
   TaskPriority,
   TaskQuadrant,
@@ -34,18 +26,6 @@ const statuses: ClarifiedTaskStatus[] = [
 ];
 const codexFits: CodexFit[] = ["high", "medium", "low", "none"];
 const owners: TaskOwner[] = ["human", "codex", "mixed"];
-const codexRunStatuses: CodexRunStatus[] = [
-  "queued",
-  "running",
-  "shipped",
-  "blocked",
-];
-const evidenceTypes: EvidenceType[] = [
-  "shipping",
-  "product_judgment",
-  "technical_learning",
-  "system_update",
-];
 
 export async function clarifyTaskAction(
   _prevState: AiTaskClarifierState,
@@ -208,100 +188,6 @@ function isAllowed<T extends string>(
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
-export async function createCodexRunAction(formData: FormData) {
-  const title = getFormValue(formData, "title").trim();
-
-  if (!title) {
-    return;
-  }
-
-  await createCodexRun({
-    date: getFormValue(formData, "date") || getTodayDate(),
-    taskId: getFormValue(formData, "taskId"),
-    title,
-    prompt: getFormValue(formData, "prompt"),
-    expectedOutput: getFormValue(formData, "expectedOutput"),
-    actualOutput: getFormValue(formData, "actualOutput"),
-    status: parseCodexRunStatus(getFormValue(formData, "status")),
-  });
-
-  revalidatePath("/today");
-  redirect("/today?created=codex-run");
-}
-
-export async function updateCodexRunStatusAction(formData: FormData) {
-  const id = getFormValue(formData, "id");
-
-  if (!id) {
-    return;
-  }
-
-  await updateCodexRun(id, {
-    status: parseCodexRunStatus(getFormValue(formData, "status")),
-    actualOutput: getFormValue(formData, "actualOutput"),
-  });
-
-  revalidatePath("/today");
-  redirect("/today?created=codex-run-updated");
-}
-
-export async function createEvidenceAction(formData: FormData) {
-  const title = getFormValue(formData, "title").trim();
-
-  if (!title) {
-    return;
-  }
-
-  await createEvidence({
-    date: getFormValue(formData, "date") || getTodayDate(),
-    type: parseEvidenceType(getFormValue(formData, "type")),
-    title,
-    description: getFormValue(formData, "description"),
-    artifactUrl: getFormValue(formData, "artifactUrl"),
-    taskId: getFormValue(formData, "taskId"),
-    codexRunId: getFormValue(formData, "codexRunId"),
-  });
-
-  revalidatePath("/today");
-  redirect("/today?created=evidence");
-}
-
-export async function updateOperatingContextAction(formData: FormData) {
-  await updateOperatingContext({
-    northStar: getFormValue(formData, "northStar"),
-    currentFocus: getFormValue(formData, "currentFocus"),
-    activeConstraints: parseList(getFormValue(formData, "activeConstraints")),
-    antiGoals: parseList(getFormValue(formData, "antiGoals")),
-    principles: parseList(getFormValue(formData, "principles")),
-  });
-
-  revalidatePath("/today");
-  redirect("/today?context=saved");
-}
-
-function parseCodexRunStatus(value: string): CodexRunStatus {
-  const status = value as CodexRunStatus;
-
-  return codexRunStatuses.includes(status) ? status : "queued";
-}
-
-function parseEvidenceType(value: string): EvidenceType {
-  const type = value as EvidenceType;
-
-  return evidenceTypes.includes(type) ? type : "shipping";
-}
-
-function parseList(value: string) {
-  return value
-    .split(/[,，、\n]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function getFormValue(formData: FormData, key: string) {
-  return String(formData.get(key) || "");
 }
 
 function getTodayDate() {

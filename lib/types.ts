@@ -125,7 +125,7 @@ export type AiWeeklyReview = {
   createdAt: string;
 };
 
-export type CodexRunStatus = "queued" | "running" | "shipped" | "blocked";
+type CodexRunStatus = "queued" | "running" | "shipped" | "blocked";
 
 export type CodexRun = {
   id: string;
@@ -140,7 +140,7 @@ export type CodexRun = {
   updatedAt: string;
 };
 
-export type EvidenceType =
+type EvidenceType =
   | "shipping"
   | "product_judgment"
   | "technical_learning"
@@ -212,25 +212,6 @@ export type CreateAiDailyReviewInput = Omit<AiDailyReview, "id" | "createdAt">;
 export type CreateAiWeeklyReviewInput = Omit<
   AiWeeklyReview,
   "id" | "createdAt"
->;
-
-export type CreateCodexRunInput = Omit<
-  CodexRun,
-  "id" | "createdAt" | "updatedAt"
->;
-
-export type UpdateCodexRunPatch = Partial<
-  Omit<CodexRun, "id" | "createdAt" | "updatedAt">
->;
-
-export type CreateEvidenceInput = Omit<
-  Evidence,
-  "id" | "createdAt" | "updatedAt"
->;
-
-export type UpdateOperatingContextInput = Omit<
-  OperatingContext,
-  "updatedAt"
 >;
 
 export type ClarifiedTaskStatus = Extract<
