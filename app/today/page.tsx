@@ -76,7 +76,6 @@ const statusActions: Array<{ status: TaskStatus; label: string }> = [
   { status: "active", label: "推进中" },
   { status: "codex_ready", label: "Codex 就绪" },
   { status: "waiting", label: "等待" },
-  { status: "review", label: "复核" },
   { status: "done", label: "完成" },
 ];
 
@@ -563,7 +562,6 @@ function TaskCard({
       <dl className="grid gap-2">
         <Detail label="下一步" value={task.nextAction || "未填写"} />
         <Detail label="完成标准" value={task.doneWhen || "未填写"} />
-        <Detail label="状态" value={statusLabels[task.status]} />
         <Detail
           label="风险"
           value={task.riskFlags.length > 0 ? task.riskFlags.join("、") : "无"}
