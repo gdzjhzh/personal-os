@@ -219,7 +219,6 @@ function TodayTasksView({
   productTeardownCount: number;
 }) {
   const plannedTasks = tasks.filter((task) => isPlannedForToday(task, today));
-  const taskPool = tasks.filter((task) => !isPlannedForToday(task, today));
   const plannedP0 = plannedTasks.find(
     (task) => task.plannedFor === today && task.priority === "P0",
   );
@@ -237,9 +236,8 @@ function TodayTasksView({
       <QuadrantGrid
         productProgress={productProgress}
         tasks={plannedTasks}
-        today={today}
       />
-      <TaskPool tasks={taskPool} today={today} />
+      <TaskPool tasks={tasks} today={today} />
     </div>
   );
 }
@@ -465,11 +463,9 @@ function ProgressPanel({
 
 function QuadrantGrid({
   tasks,
-  today,
   productProgress,
 }: {
   tasks: Task[];
-  today: string;
   productProgress: number;
 }) {
   return (
@@ -500,10 +496,9 @@ function QuadrantGrid({
               {quadrantTasks.length > 0 ? (
                 <div className="grid gap-2">
                   {quadrantTasks.map((task) => (
-                    <TaskCard
+                    <CompactQuadrantTaskCard
                       key={task.id}
                       task={task}
-                      today={today}
                       displayQuadrant={quadrant.id}
                     />
                   ))}
@@ -538,17 +533,15 @@ function ProductTeardownFixedCard({ progress }: { progress: number }) {
   );
 }
 
-function TaskCard({
+function CompactQuadrantTaskCard({
   task,
-  today,
   displayQuadrant,
 }: {
   task: Task;
-  today: string;
   displayQuadrant: TaskQuadrant;
 }) {
   return (
-    <article className="grid gap-3 border border-zinc-800 bg-black/80 p-3 text-sm">
+    <article className="grid gap-2 border border-zinc-800 bg-black/80 p-3 text-sm">
       <div className="grid gap-1">
         <div className="flex flex-wrap items-start gap-2">
           <PriorityBadge priority={task.priority} />
@@ -556,132 +549,89 @@ function TaskCard({
             {task.title}
           </h4>
         </div>
-        <p className="text-zinc-500">{task.project || "未填写项目"}</p>
-      </div>
-
-      <dl className="grid gap-2">
-        <Detail label="下一步" value={task.nextAction || "未填写"} />
-        <Detail label="完成标准" value={task.doneWhen || "未填写"} />
-        <Detail
-          label="风险"
-          value={task.riskFlags.length > 0 ? task.riskFlags.join("、") : "无"}
-        />
-      </dl>
-
-      <div className="grid gap-2">
-        <div className="flex flex-wrap gap-1.5">
-          {statusActions.map((action) => (
-            <form action={updateTaskStatusAction} key={action.status}>
-              <input type="hidden" name="id" value={task.id} />
-              <button
-                className={
-                  task.status === action.status
-                    ? activeActionButtonClassName
-                    : actionButtonClassName
-                }
-                name="status"
-                type="submit"
-                value={action.status}
-              >
-                {action.label}
-              </button>
-            </form>
-          ))}
-          <form action={unplanTaskAction}>
-            <input type="hidden" name="id" value={task.id} />
-            <input type="hidden" name="quadrant" value={displayQuadrant} />
-            <button className={actionButtonClassName} type="submit">
-              移出今日
-            </button>
-          </form>
-        </div>
-
-        <div className="flex flex-wrap gap-1.5">
-          {quadrants.map((quadrant) => (
-            <form action={moveTaskQuadrantAction} key={quadrant.id}>
-              <input type="hidden" name="id" value={task.id} />
-              <input type="hidden" name="today" value={today} />
-              <button
-                className={
-                  displayQuadrant === quadrant.id && task.plannedFor === today
-                    ? activeActionButtonClassName
-                    : actionButtonClassName
-                }
-                name="quadrant"
-                type="submit"
-                value={quadrant.id}
-              >
-                移到 {quadrantLabel(quadrant.id)}
-              </button>
-            </form>
-          ))}
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500">
+          <span>{task.project || "未填写项目"}</span>
+          <span>{statusLabels[task.status]}</span>
+          <span>今日 {quadrantLabel(displayQuadrant)}</span>
         </div>
       </div>
 
-      <details className="group border-t border-zinc-900 pt-2">
-        <summary className="cursor-pointer text-sm font-medium text-emerald-300 hover:text-emerald-200">
-          生成 Codex 指令
-        </summary>
-        <textarea
-          className="mt-2 min-h-64 w-full resize-y border border-zinc-800 bg-zinc-950 p-3 font-mono text-xs leading-5 text-zinc-300 outline-none focus:border-emerald-500"
-          readOnly
-          value={generateCodexPacket(task)}
-        />
-      </details>
+      <p className="min-w-0 truncate text-zinc-400">
+        下一步：{task.nextAction || "未填写"}
+      </p>
     </article>
   );
 }
 
 function TaskPool({ tasks, today }: { tasks: Task[]; today: string }) {
+  const activeTodayTasks = tasks.filter(
+    (task) =>
+      isPlannedForToday(task, today) &&
+      !["done", "dropped"].includes(task.status),
+  );
+  const unplannedTasks = tasks.filter(
+    (task) =>
+      !isPlannedForToday(task, today) &&
+      !["waiting", "review", "frozen", "done", "dropped"].includes(task.status),
+  );
+  const waitingTasks = tasks.filter(
+    (task) =>
+      !isPlannedForToday(task, today) &&
+      ["waiting", "review", "frozen"].includes(task.status),
+  );
+  const completedTasks = tasks.filter((task) =>
+    ["done", "dropped"].includes(task.status),
+  );
   const groups: Array<{
     title: string;
+    description: string;
     tasks: Task[];
     muted?: boolean;
   }> = [
     {
+      title: "今日四象限",
+      description: "已经放进今天地图的任务，详情和操作仍在任务池处理。",
+      tasks: activeTodayTasks,
+    },
+    {
       title: "未安排",
-      tasks: tasks.filter(
-        (task) =>
-          !["inbox", "waiting", "frozen", "done", "dropped"].includes(
-            task.status,
-          ),
-      ),
+      description: "还没有加入今天四象限的可推进任务。",
+      tasks: unplannedTasks,
     },
     {
-      title: "收件箱",
-      tasks: tasks.filter((task) => task.status === "inbox"),
-    },
-    {
-      title: "等待中",
-      tasks: tasks.filter((task) => task.status === "waiting"),
-    },
-    {
-      title: "冻结",
-      tasks: tasks.filter((task) => task.status === "frozen"),
+      title: "等待 / 复核 / 冻结",
+      description: "暂时不能直接推进，但仍属于任务池。",
+      tasks: waitingTasks,
     },
     {
       title: "已完成 / 已放弃",
-      tasks: tasks.filter((task) => ["done", "dropped"].includes(task.status)),
+      description: "保留结果和历史状态，默认弱化显示。",
+      tasks: completedTasks,
       muted: true,
     },
   ];
 
   return (
-    <details className="border border-zinc-800 bg-black/80 p-4">
+    <details className="border border-zinc-800 bg-black/80 p-4" open>
       <summary className="cursor-pointer text-base font-semibold text-zinc-100">
-        任务池
+        任务池（{tasks.length}）
       </summary>
       <div className="mt-3 grid gap-3">
-        <p className="text-sm text-zinc-500">未安排到今天四象限的任务。</p>
+        <p className="text-sm text-zinc-500">
+          任务池是全量任务 SSOT；四象限只决定今天的摆放位置。
+        </p>
         {tasks.length > 0 ? (
           groups.map((group) => (
             <section
               className={group.muted ? "grid gap-2 opacity-70" : "grid gap-2"}
               key={group.title}
             >
-              <h3 className="text-sm font-semibold text-zinc-300">
-                {group.title}
-              </h3>
+              <div className="grid gap-1">
+                <h3 className="text-sm font-semibold text-zinc-300">
+                  {group.title}
+                </h3>
+                <p className="text-xs text-zinc-600">{group.description}</p>
+              </div>
               {group.tasks.length > 0 ? (
                 <div className="grid gap-2">
                   {group.tasks.map((task) => (
@@ -702,32 +652,105 @@ function TaskPool({ tasks, today }: { tasks: Task[]; today: string }) {
 }
 
 function TaskPoolItem({ task, today }: { task: Task; today: string }) {
+  const plannedToday = isPlannedForToday(task, today);
+  const displayQuadrant = getDisplayQuadrant(task);
+
   return (
-    <article className="grid gap-2 border border-zinc-900 bg-zinc-950 p-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
-      <div className="min-w-0">
-        <div className="break-words font-medium text-zinc-100">
-          [{task.priority}] {task.title}
+    <article className="grid gap-3 border border-zinc-900 bg-zinc-950 p-3 text-sm">
+      <div className="grid gap-2 lg:grid-cols-[1fr_auto] lg:items-start">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-start gap-2">
+            <PriorityBadge priority={task.priority} />
+            <h4 className="min-w-0 flex-1 break-words font-semibold text-zinc-100">
+              {task.title}
+            </h4>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500">
+            <span>{statusLabels[task.status]}</span>
+            <span>{task.project || "未填写项目"}</span>
+            <span>
+              {plannedToday
+                ? `今日 ${quadrantLabel(displayQuadrant)}`
+                : "未安排到今天"}
+            </span>
+          </div>
         </div>
-        <div className="mt-1 text-zinc-500">
-          {statusLabels[task.status]} · {task.project || "未填写项目"}
+
+        <div className="flex flex-wrap gap-1.5 lg:justify-end">
+          {statusActions.map((action) => (
+            <form action={updateTaskStatusAction} key={action.status}>
+              <input type="hidden" name="id" value={task.id} />
+              <button
+                className={
+                  task.status === action.status
+                    ? activeActionButtonClassName
+                    : actionButtonClassName
+                }
+                name="status"
+                type="submit"
+                value={action.status}
+              >
+                {action.label}
+              </button>
+            </form>
+          ))}
+          {plannedToday ? (
+            <form action={unplanTaskAction}>
+              <input type="hidden" name="id" value={task.id} />
+              <input type="hidden" name="quadrant" value={displayQuadrant} />
+              <button className={actionButtonClassName} type="submit">
+                移出今日
+              </button>
+            </form>
+          ) : null}
         </div>
       </div>
-      <div className="flex flex-wrap gap-1.5 sm:justify-end">
+
+      <dl className="grid gap-2 md:grid-cols-3">
+        <Detail label="下一步" value={task.nextAction || "未填写"} />
+        <Detail label="完成标准" value={task.doneWhen || "未填写"} />
+        <Detail
+          label="风险"
+          value={task.riskFlags.length > 0 ? task.riskFlags.join("、") : "无"}
+        />
+      </dl>
+
+      <div className="flex flex-wrap gap-1.5">
         {quadrants.map((quadrant) => (
-          <form action={planTaskForTodayAction} key={quadrant.id}>
+          <form
+            action={
+              plannedToday ? moveTaskQuadrantAction : planTaskForTodayAction
+            }
+            key={quadrant.id}
+          >
             <input type="hidden" name="id" value={task.id} />
             <input type="hidden" name="today" value={today} />
             <button
-              className={actionButtonClassName}
+              className={
+                plannedToday && displayQuadrant === quadrant.id
+                  ? activeActionButtonClassName
+                  : actionButtonClassName
+              }
               name="quadrant"
               type="submit"
               value={quadrant.id}
             >
-              加入今日 {quadrantLabel(quadrant.id)}
+              {plannedToday ? "移到" : "加入今日"} {quadrantLabel(quadrant.id)}
             </button>
           </form>
         ))}
       </div>
+
+      <details className="group border-t border-zinc-900 pt-2">
+        <summary className="cursor-pointer text-sm font-medium text-emerald-300 hover:text-emerald-200">
+          生成 Codex 指令
+        </summary>
+        <textarea
+          className="mt-2 min-h-64 w-full resize-y border border-zinc-800 bg-black p-3 font-mono text-xs leading-5 text-zinc-300 outline-none focus:border-emerald-500"
+          readOnly
+          value={generateCodexPacket(task)}
+        />
+      </details>
     </article>
   );
 }
