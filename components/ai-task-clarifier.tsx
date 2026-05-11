@@ -1,6 +1,11 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import {
+  useActionState,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useFormStatus } from "react-dom";
 
 import {
@@ -14,6 +19,8 @@ import type {
 } from "@/lib/server/ai/deepseek";
 
 const initialState: AiTaskClarifierState = { status: "idle" };
+const modelLevelStorageKey = "personal-os.ai-task.model-level";
+const modelLevelChangeEvent = "personal-os.ai-task.model-level-change";
 
 export function AiTaskClarifier({
   modelInfo,
@@ -24,7 +31,7 @@ export function AiTaskClarifier({
     clarifyTaskAction,
     initialState,
   );
-  const [modelLevel, setModelLevel] = useState<DeepSeekReasoningEffort>(
+  const modelLevel = useStoredModelLevel(
     modelInfo.defaultReasoningEffort,
   );
 
@@ -96,7 +103,7 @@ export function AiTaskClarifier({
       <AiModelSettings
         modelInfo={modelInfo}
         modelLevel={modelLevel}
-        onModelLevelChange={setModelLevel}
+        onModelLevelChange={saveStoredModelLevel}
       />
     </section>
   );
@@ -226,6 +233,39 @@ function AiModelSettings({
       ) : null}
     </div>
   );
+}
+
+function useStoredModelLevel(defaultLevel: DeepSeekReasoningEffort) {
+  return useSyncExternalStore(
+    subscribeToModelLevel,
+    () => readStoredModelLevel(defaultLevel),
+    () => defaultLevel,
+  );
+}
+
+function subscribeToModelLevel(onStoreChange: () => void) {
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener(modelLevelChangeEvent, onStoreChange);
+
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener(modelLevelChangeEvent, onStoreChange);
+  };
+}
+
+function readStoredModelLevel(defaultLevel: DeepSeekReasoningEffort) {
+  if (typeof window === "undefined") {
+    return defaultLevel;
+  }
+
+  const saved = window.localStorage.getItem(modelLevelStorageKey);
+
+  return saved === "high" || saved === "max" ? saved : defaultLevel;
+}
+
+function saveStoredModelLevel(level: DeepSeekReasoningEffort) {
+  window.localStorage.setItem(modelLevelStorageKey, level);
+  window.dispatchEvent(new Event(modelLevelChangeEvent));
 }
 
 function SettingsItem({ label, value }: { label: string; value: string }) {
