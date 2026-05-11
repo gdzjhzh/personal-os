@@ -6,6 +6,7 @@ import { AiTaskClarifier } from "@/components/ai-task-clarifier";
 import { generateCodexPacket } from "@/lib/server/codexPacket";
 import {
   DeepSeekRequestError,
+  getDeepSeekModelInfo,
   MissingDeepSeekApiKeyError,
 } from "@/lib/server/ai/deepseek";
 import {
@@ -200,7 +201,9 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
             />
           ) : null}
 
-          {view === "new-task" ? <NewTaskView today={today} /> : null}
+          {view === "new-task" ? (
+            <NewTaskView aiModelInfo={getDeepSeekModelInfo()} today={today} />
+          ) : null}
         </div>
       </div>
     </main>
@@ -242,10 +245,16 @@ function TodayTasksView({
   );
 }
 
-function NewTaskView({ today }: { today: string }) {
+function NewTaskView({
+  today,
+  aiModelInfo,
+}: {
+  today: string;
+  aiModelInfo: ReturnType<typeof getDeepSeekModelInfo>;
+}) {
   return (
     <div className="grid gap-4">
-      <AiTaskClarifier />
+      <AiTaskClarifier modelInfo={aiModelInfo} />
       <ManualTaskSection today={today} />
     </div>
   );

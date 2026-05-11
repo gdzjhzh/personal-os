@@ -18,6 +18,15 @@ type DeepSeekChatCompletionResponse = {
 
 export type DeepSeekReasoningEffort = "high" | "max";
 
+export type DeepSeekModelInfo = {
+  provider: "DeepSeek";
+  model: string;
+  endpointHost: string;
+  thinkingEnabled: boolean;
+  apiKeyConfigured: boolean;
+  defaultReasoningEffort: DeepSeekReasoningEffort;
+};
+
 export class MissingDeepSeekApiKeyError extends Error {
   constructor() {
     super("Missing DEEPSEEK_API_KEY");
@@ -81,8 +90,27 @@ export async function createDeepSeekChatCompletion({
   return content;
 }
 
+export function getDeepSeekModelInfo(): DeepSeekModelInfo {
+  return {
+    provider: "DeepSeek",
+    model: currentDeepSeekModel(),
+    endpointHost: "api.deepseek.com",
+    thinkingEnabled: true,
+    apiKeyConfigured: Boolean(
+      process.env.DEEPSEEK_API_KEY?.trim() || process.env.PSOS_AI_API_KEY?.trim(),
+    ),
+    defaultReasoningEffort: readReasoningEffortFromEnv(),
+  };
+}
+
 function normalizeDeepSeekModel(baseModel: string) {
   return baseModel.replace(/\[1m\]$/i, "");
+}
+
+function currentDeepSeekModel() {
+  return normalizeDeepSeekModel(
+    process.env.DEEPSEEK_MODEL?.trim() || "deepseek-v4-pro",
+  );
 }
 
 function readReasoningEffortFromEnv(): DeepSeekReasoningEffort {

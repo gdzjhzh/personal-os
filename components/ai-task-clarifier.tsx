@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 
 import {
@@ -8,13 +8,24 @@ import {
   saveClarifiedTaskAction,
 } from "@/app/today/actions";
 import type { AiTaskClarifierState, ClarifiedTaskDraft } from "@/lib/types";
+import type {
+  DeepSeekModelInfo,
+  DeepSeekReasoningEffort,
+} from "@/lib/server/ai/deepseek";
 
 const initialState: AiTaskClarifierState = { status: "idle" };
 
-export function AiTaskClarifier() {
+export function AiTaskClarifier({
+  modelInfo,
+}: {
+  modelInfo: DeepSeekModelInfo;
+}) {
   const [state, formAction, isPending] = useActionState(
     clarifyTaskAction,
     initialState,
+  );
+  const [modelLevel, setModelLevel] = useState<DeepSeekReasoningEffort>(
+    modelInfo.defaultReasoningEffort,
   );
 
   return (
@@ -34,6 +45,7 @@ export function AiTaskClarifier() {
           name="currentPhaseContext"
           value="make Personal SaaS OS a daily-used task planning and review system"
         />
+        <input type="hidden" name="reasoningEffort" value={modelLevel} />
         <label className="grid gap-1 text-sm text-zinc-500">
           待整理任务
           <textarea
@@ -43,7 +55,7 @@ export function AiTaskClarifier() {
             required
           />
         </label>
-        <div className="grid gap-2 md:grid-cols-[1fr_12rem_auto]">
+        <div className="grid gap-2 md:grid-cols-[1fr_auto]">
           <label className="grid gap-1 text-sm text-zinc-500">
             项目
             <input
@@ -51,17 +63,6 @@ export function AiTaskClarifier() {
               name="project"
               defaultValue="Personal SaaS OS"
             />
-          </label>
-          <label className="grid gap-1 text-sm text-zinc-500">
-            整理方式
-            <select
-              className="border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500"
-              name="reasoningEffort"
-              defaultValue="high"
-            >
-              <option value="high">high</option>
-              <option value="max">max</option>
-            </select>
           </label>
           <div className="flex items-end">
             <button
@@ -91,7 +92,176 @@ export function AiTaskClarifier() {
       {state.status === "success" ? (
         <ClarifiedPreview task={state.task} rawOutput={state.rawOutput} />
       ) : null}
+
+      <AiModelSettings
+        modelInfo={modelInfo}
+        modelLevel={modelLevel}
+        onModelLevelChange={setModelLevel}
+      />
     </section>
+  );
+}
+
+function AiModelSettings({
+  modelInfo,
+  modelLevel,
+  onModelLevelChange,
+}: {
+  modelInfo: DeepSeekModelInfo;
+  modelLevel: DeepSeekReasoningEffort;
+  onModelLevelChange: (level: DeepSeekReasoningEffort) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isOpen]);
+
+  function updateLevel(level: DeepSeekReasoningEffort) {
+    onModelLevelChange(level);
+  }
+
+  return (
+    <div className="grid gap-3 border border-zinc-900 bg-zinc-950/70 p-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid gap-1">
+          <h3 className="text-sm font-semibold text-zinc-100">AI 设置</h3>
+          <p className="text-xs leading-5 text-zinc-500">
+            当前模型 {modelInfo.model}，整理等级 {modelLevel}
+          </p>
+        </div>
+        <button
+          className="w-fit border border-zinc-700 bg-black px-3 py-2 text-sm font-semibold text-zinc-100 hover:border-emerald-500 hover:text-emerald-300"
+          type="button"
+          onClick={() => setIsOpen(true)}
+        >
+          查看 / 调整
+        </button>
+      </div>
+
+      {isOpen ? (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6"
+          role="dialog"
+        >
+          <div className="grid max-h-[calc(100vh-3rem)] w-full max-w-xl gap-4 overflow-y-auto border border-zinc-700 bg-[#080908] p-4 shadow-2xl shadow-black">
+            <div className="flex items-start justify-between gap-4">
+              <div className="grid gap-1">
+                <h3 className="text-lg font-semibold text-zinc-50">AI 设置</h3>
+                <p className="text-sm leading-6 text-zinc-500">
+                  只影响 AI 任务梳理。API Key 状态只显示是否已配置，不显示具体内容。
+                </p>
+              </div>
+              <button
+                aria-label="关闭 AI 设置"
+                className="border border-zinc-800 px-2 py-1 text-sm text-zinc-400 hover:border-zinc-600 hover:text-zinc-100"
+                type="button"
+                onClick={() => setIsOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <dl className="grid gap-2 text-sm sm:grid-cols-2">
+              <SettingsItem label="供应商" value={modelInfo.provider} />
+              <SettingsItem label="模型" value={modelInfo.model} />
+              <SettingsItem label="接口" value={modelInfo.endpointHost} />
+              <SettingsItem
+                label="Thinking"
+                value={modelInfo.thinkingEnabled ? "已启用" : "未启用"}
+              />
+              <SettingsItem
+                label="API Key"
+                value={modelInfo.apiKeyConfigured ? "已配置" : "未配置"}
+              />
+              <SettingsItem
+                label="环境默认等级"
+                value={modelInfo.defaultReasoningEffort}
+              />
+            </dl>
+
+            <div className="grid gap-2">
+              <div className="text-sm font-semibold text-zinc-100">
+                模型等级
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <ModelLevelButton
+                  active={modelLevel === "high"}
+                  description="日常任务整理，速度和质量更均衡。"
+                  level="high"
+                  onSelect={updateLevel}
+                />
+                <ModelLevelButton
+                  active={modelLevel === "max"}
+                  description="更强推理，适合模糊、复杂或高风险任务。"
+                  level="max"
+                  onSelect={updateLevel}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                className="border border-emerald-600 bg-emerald-500 px-3 py-2 text-base font-semibold text-black hover:bg-emerald-400"
+                type="button"
+                onClick={() => setIsOpen(false)}
+              >
+                完成
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SettingsItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1 border border-zinc-900 bg-black px-3 py-2">
+      <dt className="text-xs text-zinc-500">{label}</dt>
+      <dd className="break-words font-mono text-sm text-zinc-200">{value}</dd>
+    </div>
+  );
+}
+
+function ModelLevelButton({
+  active,
+  description,
+  level,
+  onSelect,
+}: {
+  active: boolean;
+  description: string;
+  level: DeepSeekReasoningEffort;
+  onSelect: (level: DeepSeekReasoningEffort) => void;
+}) {
+  return (
+    <button
+      aria-pressed={active}
+      className={`grid gap-1 border px-3 py-3 text-left ${
+        active
+          ? "border-emerald-600 bg-emerald-500/10 text-emerald-200"
+          : "border-zinc-800 bg-black text-zinc-300 hover:border-zinc-600"
+      }`}
+      type="button"
+      onClick={() => onSelect(level)}
+    >
+      <span className="font-mono text-base font-semibold">{level}</span>
+      <span className="text-xs leading-5 text-zinc-500">{description}</span>
+    </button>
   );
 }
 
