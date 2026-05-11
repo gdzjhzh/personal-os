@@ -41,7 +41,7 @@ export default async function ProductTeardownsPage({
               className="text-sm text-emerald-300 hover:text-emerald-200"
               href="/today"
             >
-              返回今日执行台
+              返回今日任务跟踪
             </Link>
             <p className="mt-3 font-mono text-xs text-emerald-400">
               Personal SaaS OS · 产品判断训练

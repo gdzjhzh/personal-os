@@ -126,10 +126,10 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         <header className="flex flex-col gap-2 border-b border-zinc-800 pb-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="font-mono text-xs text-emerald-400">
-              Personal SaaS OS · 本地执行台
+              Personal SaaS OS
             </p>
             <h1 className="mt-1 text-2xl font-semibold text-zinc-50 sm:text-3xl">
-              今日执行台
+              今日任务跟踪
             </h1>
           </div>
           <div className="text-sm leading-6 text-zinc-500 md:text-right">
