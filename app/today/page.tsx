@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { AiTaskClarifier } from "@/components/ai-task-clarifier";
 import { CodexPacketPanel } from "@/components/codex-packet-panel";
+import { ExportToast } from "@/components/export-toast";
 import { GrowthLoopPanel } from "@/components/growth-loop-panel";
 import {
   DeepSeekRequestError,
@@ -142,7 +143,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
         </header>
 
         {params?.exported ? (
-          <Notice>Markdown 已导出：{decodeURIComponent(params.exported)}</Notice>
+          <ExportToast filePath={decodeURIComponent(params.exported)} />
         ) : null}
         {params?.review === "saved" ? <Notice>每日复盘已保存。</Notice> : null}
         {params?.created === "task" ? <Notice>新任务已写入 SSOT。</Notice> : null}
