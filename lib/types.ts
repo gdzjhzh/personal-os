@@ -301,6 +301,68 @@ export type NeedClarification = {
   recommendation: string;
 };
 
+export type AiDecisionSignal = {
+  sourceType:
+    | "rawInput"
+    | "operatingContext"
+    | "task"
+    | "review"
+    | "evidence"
+    | "productTeardown"
+    | "driftPattern";
+  sourceId?: string;
+  label: string;
+  quote: string;
+  interpretation: string;
+  strength: "weak" | "medium" | "strong";
+};
+
+export type AiCandidateDecision = {
+  title: string;
+  whyConsidered: string;
+  northStarFit: number;
+  currentFocusFit: number;
+  evidencePotential: number;
+  avoidanceRisk: number;
+  effortLevel: "small" | "medium" | "large";
+  decision: "recommended" | "alternative" | "rejected";
+  reason: string;
+};
+
+export type AiGuardrailApplied = {
+  rule: string;
+  triggeredBy: string;
+  effect: string;
+};
+
+export type AiDecisionTrace = {
+  decisionQuestion: string;
+  contextSummary: {
+    northStar: string;
+    currentFocus: string;
+    antiGoalsUsed: string[];
+    principlesUsed: string[];
+    contextStats: DecisionContextPack["contextStats"];
+  };
+  signals: AiDecisionSignal[];
+  hypotheses: Array<{
+    statement: string;
+    confidence: NeedConfidence;
+    supportingSignals: string[];
+    uncertainty: string;
+  }>;
+  candidateComparison: AiCandidateDecision[];
+  guardrailsApplied: AiGuardrailApplied[];
+  finalDecision: {
+    selectedTitle: string;
+    whyThisNow: string;
+    whyNotOthers: string[];
+    smallestNextAction: string;
+    doneWhen: string;
+  };
+  discussionPrompts: string[];
+};
+
 export type CreateTaskInput = {
   title: string;
   project?: string;
@@ -362,6 +424,7 @@ export type AiTaskClarifierState =
   | {
       status: "success";
       needClarification: NeedClarification;
+      decisionTrace: AiDecisionTrace;
       task: ClarifiedTaskDraft;
       rawOutput: string;
       contextStats?: DecisionContextPack["contextStats"];

@@ -13,6 +13,7 @@ import {
   saveClarifiedTaskAction,
 } from "@/app/today/actions";
 import type {
+  AiDecisionTrace,
   AiTaskClarifierState,
   ClarifiedTaskDraft,
   NeedClarification,
@@ -25,6 +26,8 @@ import type {
 const initialState: AiTaskClarifierState = { status: "idle" };
 const modelLevelStorageKey = "personal-os.ai-task.model-level";
 const modelLevelChangeEvent = "personal-os.ai-task.model-level-change";
+const currentPhaseContext =
+  "make Personal SaaS OS a daily-used task planning and review system";
 
 export function AiTaskClarifier({
   modelInfo,
@@ -35,6 +38,8 @@ export function AiTaskClarifier({
     clarifyTaskAction,
     initialState,
   );
+  const [rawTask, setRawTask] = useState("");
+  const [project, setProject] = useState("Personal SaaS OS");
   const modelLevel = useStoredModelLevel(
     modelInfo.defaultReasoningEffort,
   );
@@ -54,7 +59,7 @@ export function AiTaskClarifier({
         <input
           type="hidden"
           name="currentPhaseContext"
-          value="make Personal SaaS OS a daily-used task planning and review system"
+          value={currentPhaseContext}
         />
         <input type="hidden" name="reasoningEffort" value={modelLevel} />
         <label className="grid gap-1 text-sm text-zinc-500">
@@ -64,6 +69,8 @@ export function AiTaskClarifier({
             name="rawTask"
             placeholder="例如：研究几个 SaaS 产品，拆出今天能推进的一步"
             required
+            value={rawTask}
+            onChange={(event) => setRawTask(event.target.value)}
           />
         </label>
         <div className="grid gap-2 md:grid-cols-[1fr_auto]">
@@ -72,7 +79,8 @@ export function AiTaskClarifier({
             <input
               className="border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500"
               name="project"
-              defaultValue="Personal SaaS OS"
+              value={project}
+              onChange={(event) => setProject(event.target.value)}
             />
           </label>
           <div className="flex items-end">
@@ -106,7 +114,17 @@ export function AiTaskClarifier({
             contextStats={state.contextStats}
             need={state.needClarification}
           />
+          <DecisionTracePreview trace={state.decisionTrace} />
           <ClarifiedPreview task={state.task} rawOutput={state.rawOutput} />
+          <ClarificationFeedbackForm
+            currentPhaseContext={currentPhaseContext}
+            formAction={formAction}
+            isPending={isPending}
+            modelLevel={modelLevel}
+            needClarification={state.needClarification}
+            project={project}
+            rawTask={rawTask}
+          />
         </div>
       ) : null}
 
@@ -255,6 +273,195 @@ function NeedClarificationPreview({
   );
 }
 
+function DecisionTracePreview({ trace }: { trace: AiDecisionTrace }) {
+  return (
+    <div className="grid gap-4 border border-zinc-800 bg-black p-3">
+      <div className="grid gap-1">
+        <p className="text-sm text-zinc-500">AI 决策逻辑</p>
+        <h3 className="break-words text-base font-semibold text-zinc-100">
+          {trace.decisionQuestion || "本次应该生成什么任务？"}
+        </h3>
+      </div>
+
+      <NeedBlock title="使用的上下文">
+        <div className="grid gap-3 text-sm">
+          <div className="grid gap-2 md:grid-cols-2">
+            <PreviewItem
+              label="North Star"
+              value={trace.contextSummary.northStar || "无"}
+            />
+            <PreviewItem
+              label="Current Focus"
+              value={trace.contextSummary.currentFocus || "无"}
+            />
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs text-zinc-300">
+            <ContextStat
+              label="活跃任务"
+              value={trace.contextSummary.contextStats.activeTaskCount}
+            />
+            <ContextStat
+              label="近期复盘"
+              value={trace.contextSummary.contextStats.recentReviewCount}
+            />
+            <ContextStat
+              label="近期证据"
+              value={trace.contextSummary.contextStats.recentEvidenceCount}
+            />
+            <ContextStat
+              label="产品拆解"
+              value={
+                trace.contextSummary.contextStats.recentProductTeardownCount
+              }
+            />
+            <ContextStat
+              label="漂移模式"
+              value={trace.contextSummary.contextStats.recentDriftPatternCount}
+            />
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <KeyList
+              label="使用的反目标"
+              items={trace.contextSummary.antiGoalsUsed}
+            />
+            <KeyList
+              label="使用的原则"
+              items={trace.contextSummary.principlesUsed}
+            />
+          </div>
+        </div>
+      </NeedBlock>
+
+      <NeedBlock title="关键证据 / 信号">
+        {trace.signals.length > 0 ? (
+          <div className="grid gap-2">
+            {trace.signals.map((signal) => (
+              <article
+                className="grid gap-2 border border-zinc-800 bg-zinc-950/70 p-3 text-sm"
+                key={`${signal.sourceType}-${signal.sourceId || signal.label}-${signal.quote}`}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="border border-zinc-700 px-2 py-0.5 font-mono text-xs text-zinc-300">
+                    {signal.sourceType}
+                  </span>
+                  <span className="font-semibold text-zinc-100">
+                    {signal.label}
+                  </span>
+                  <span className="text-xs text-zinc-500">
+                    强度：{strengthLabel(signal.strength)}
+                  </span>
+                </div>
+                <blockquote className="border-l border-emerald-900 pl-2 leading-6 text-zinc-300">
+                  {signal.quote || "无引用"}
+                </blockquote>
+                <p className="break-words leading-6 text-zinc-400">
+                  {signal.interpretation || "无解释"}
+                </p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-zinc-500">无</p>
+        )}
+      </NeedBlock>
+
+      <NeedBlock title="候选任务对比">
+        <div className="grid gap-2">
+          {trace.candidateComparison.map((candidate) => (
+            <article
+              className="grid gap-2 border border-zinc-800 bg-zinc-950/70 p-3 text-sm"
+              key={`${candidate.title}-${candidate.decision}`}
+            >
+              <div className="flex flex-wrap items-start gap-2">
+                <DecisionBadge decision={candidate.decision} />
+                <h4 className="min-w-0 flex-1 break-words font-semibold text-zinc-100">
+                  {candidate.title}
+                </h4>
+              </div>
+              <p className="break-words leading-6 text-zinc-400">
+                {candidate.whyConsidered}
+              </p>
+              <div className="grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-4">
+                <ScoreBadge label="愿景匹配" value={candidate.northStarFit} />
+                <ScoreBadge
+                  label="当前阶段"
+                  value={candidate.currentFocusFit}
+                />
+                <ScoreBadge
+                  label="证据潜力"
+                  value={candidate.evidencePotential}
+                />
+                <ScoreBadge
+                  label="逃避风险"
+                  value={candidate.avoidanceRisk}
+                />
+              </div>
+              <div className="text-xs text-zinc-500">
+                effort: {effortLabel(candidate.effortLevel)}
+              </div>
+              <p className="break-words leading-6 text-zinc-300">
+                {candidate.reason}
+              </p>
+            </article>
+          ))}
+        </div>
+      </NeedBlock>
+
+      <NeedBlock title="规则介入">
+        {trace.guardrailsApplied.length > 0 ? (
+          <div className="grid gap-2">
+            {trace.guardrailsApplied.map((guardrail) => (
+              <div
+                className="grid gap-1 border border-zinc-800 bg-zinc-950/70 p-3 text-sm"
+                key={`${guardrail.rule}-${guardrail.triggeredBy}`}
+              >
+                <div className="font-semibold text-zinc-100">
+                  {guardrail.rule}
+                </div>
+                <div className="text-zinc-400">
+                  触发：{guardrail.triggeredBy || "无"}
+                </div>
+                <div className="text-zinc-300">
+                  影响：{guardrail.effect || "无"}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-zinc-500">无明确规则介入。</p>
+        )}
+      </NeedBlock>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <NeedBlock title="最终选择">
+          <div className="grid gap-2 text-sm">
+            <div className="font-semibold text-emerald-200">
+              {trace.finalDecision.selectedTitle || "无"}
+            </div>
+            <p className="break-words leading-6 text-zinc-300">
+              {trace.finalDecision.whyThisNow || "无"}
+            </p>
+            <KeyList
+              label="为什么不是其他任务"
+              items={trace.finalDecision.whyNotOthers}
+            />
+            <div className="border-t border-zinc-900 pt-2 text-zinc-300">
+              最小动作：{trace.finalDecision.smallestNextAction || "无"}
+            </div>
+            <div className="text-zinc-300">
+              完成标准：{trace.finalDecision.doneWhen || "无"}
+            </div>
+          </div>
+        </NeedBlock>
+
+        <NeedBlock title="可讨论的问题">
+          <KeyList items={trace.discussionPrompts} />
+        </NeedBlock>
+      </div>
+    </div>
+  );
+}
+
 function NeedBlock({
   title,
   children,
@@ -344,6 +551,57 @@ function confidenceLabel(value: NeedClarification["inferredRealNeed"]["confidenc
   }
 
   return "低";
+}
+
+function strengthLabel(value: AiDecisionTrace["signals"][number]["strength"]) {
+  if (value === "strong") {
+    return "强";
+  }
+
+  if (value === "medium") {
+    return "中";
+  }
+
+  return "弱";
+}
+
+function effortLabel(
+  value: AiDecisionTrace["candidateComparison"][number]["effortLevel"],
+) {
+  if (value === "large") {
+    return "大";
+  }
+
+  if (value === "medium") {
+    return "中";
+  }
+
+  return "小";
+}
+
+function DecisionBadge({
+  decision,
+}: {
+  decision: AiDecisionTrace["candidateComparison"][number]["decision"];
+}) {
+  const label =
+    decision === "recommended"
+      ? "推荐"
+      : decision === "alternative"
+        ? "备选"
+        : "排除";
+  const className =
+    decision === "recommended"
+      ? "border-emerald-700 bg-emerald-500/10 text-emerald-300"
+      : decision === "alternative"
+        ? "border-zinc-700 bg-black text-zinc-300"
+        : "border-amber-900 bg-amber-950/30 text-amber-200";
+
+  return (
+    <span className={`border px-2 py-0.5 text-xs font-semibold ${className}`}>
+      {label}
+    </span>
+  );
 }
 
 function AiModelSettings({
@@ -590,6 +848,65 @@ function ClarifiedPreview({
   );
 }
 
+function ClarificationFeedbackForm({
+  currentPhaseContext,
+  formAction,
+  isPending,
+  modelLevel,
+  needClarification,
+  project,
+  rawTask,
+}: {
+  currentPhaseContext: string;
+  formAction: (formData: FormData) => void;
+  isPending: boolean;
+  modelLevel: DeepSeekReasoningEffort;
+  needClarification: NeedClarification;
+  project: string;
+  rawTask: string;
+}) {
+  return (
+    <form
+      action={formAction}
+      className="grid gap-3 border border-zinc-800 bg-zinc-950/70 p-3"
+    >
+      <input type="hidden" name="rawTask" value={rawTask} />
+      <input type="hidden" name="project" value={project} />
+      <input
+        type="hidden"
+        name="currentPhaseContext"
+        value={currentPhaseContext}
+      />
+      <input type="hidden" name="reasoningEffort" value={modelLevel} />
+      <input
+        type="hidden"
+        name="previousNeedClarificationJson"
+        value={JSON.stringify(needClarification)}
+      />
+      <div className="grid gap-1">
+        <h3 className="text-base font-semibold text-zinc-100">
+          我想修正 AI 的理解
+        </h3>
+        <p className="text-sm leading-6 text-zinc-500">
+          这段反馈只用于本次重新澄清，不会写入任务或持久化。
+        </p>
+      </div>
+      <label className="grid gap-1 text-sm text-zinc-500">
+        补充反馈
+        <textarea
+          className="min-h-28 border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500"
+          name="clarificationFeedback"
+          placeholder="例如：我不是想继续打磨系统，我真正想解决的是 AI 不知道如何结合我的长期愿景和近期复盘来生成任务。"
+          required
+        />
+      </label>
+      <div>
+        <FeedbackSubmitButton disabled={isPending} />
+      </div>
+    </form>
+  );
+}
+
 function PreviewItem({
   label,
   value,
@@ -617,6 +934,21 @@ function SaveButton() {
       disabled={pending}
     >
       {pending ? "写入中..." : "写入任务"}
+    </button>
+  );
+}
+
+function FeedbackSubmitButton({ disabled }: { disabled: boolean }) {
+  const { pending } = useFormStatus();
+  const isDisabled = disabled || pending;
+
+  return (
+    <button
+      className="border border-zinc-700 bg-black px-3 py-2 text-base font-semibold text-zinc-100 hover:border-emerald-500 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+      type="submit"
+      disabled={isDisabled}
+    >
+      {isDisabled ? "重新澄清中..." : "带着我的反馈重新澄清"}
     </button>
   );
 }

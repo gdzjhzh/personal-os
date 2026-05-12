@@ -1,4 +1,8 @@
 import type {
+  AiCandidateDecision,
+  AiDecisionSignal,
+  AiDecisionTrace,
+  AiGuardrailApplied,
   ClarifiedTaskDraft,
   ClarifiedTaskStatus,
   CodexFit,
@@ -21,10 +25,13 @@ type ClarifyTaskInput = {
   currentPhaseContext?: string;
   reasoningEffort?: DeepSeekReasoningEffort;
   contextPack?: DecisionContextPack;
+  clarificationFeedback?: string;
+  previousNeedClarification?: NeedClarification;
 };
 
 type ClarifyTaskSuccess = {
   needClarification: NeedClarification;
+  decisionTrace: AiDecisionTrace;
   task: ClarifiedTaskDraft;
   rawOutput: string;
 };
@@ -39,6 +46,30 @@ const statuses: ClarifiedTaskStatus[] = [
 ];
 const codexFits: CodexFit[] = ["high", "medium", "low", "none"];
 const owners: TaskOwner[] = ["human", "codex", "mixed"];
+const signalSourceTypes: AiDecisionSignal["sourceType"][] = [
+  "rawInput",
+  "operatingContext",
+  "task",
+  "review",
+  "evidence",
+  "productTeardown",
+  "driftPattern",
+];
+const signalStrengths: AiDecisionSignal["strength"][] = [
+  "weak",
+  "medium",
+  "strong",
+];
+const effortLevels: AiCandidateDecision["effortLevel"][] = [
+  "small",
+  "medium",
+  "large",
+];
+const candidateDecisions: AiCandidateDecision["decision"][] = [
+  "recommended",
+  "alternative",
+  "rejected",
+];
 const forbiddenSuggestions = [
   "RAG",
   "vector search",
@@ -159,12 +190,17 @@ function parseClarifierResult(
     throwInvalid(rawOutput);
   }
 
-  if (!isRecord(parsed.needClarification) || !isRecord(parsed.task)) {
+  if (
+    !isRecord(parsed.needClarification) ||
+    !isRecord(parsed.decisionTrace) ||
+    !isRecord(parsed.task)
+  ) {
     throwInvalid(rawOutput);
   }
 
   return {
     needClarification: readNeedClarification(parsed.needClarification, rawOutput),
+    decisionTrace: readDecisionTrace(parsed.decisionTrace, rawOutput),
     task: parseClarifiedTask(parsed.task, rawOutput, input),
     rawOutput,
   };
@@ -209,6 +245,7 @@ Before generating the task, judge:
 5. What the smallest real action for today is.
 
 Return ONLY strict JSON. Do not include markdown, comments, code fences, or explanations.
+Do not output chain-of-thought. decisionTrace must be a concise, auditable decision summary: evidence, candidate comparison, guardrails, and conclusion.
 
 The JSON must match this exact structure:
 {
@@ -250,6 +287,68 @@ The JSON must match this exact structure:
     ],
     "recommendation": string
   },
+  "decisionTrace": {
+    "decisionQuestion": string,
+    "contextSummary": {
+      "northStar": string,
+      "currentFocus": string,
+      "antiGoalsUsed": string[],
+      "principlesUsed": string[],
+      "contextStats": {
+        "activeTaskCount": number,
+        "recentReviewCount": number,
+        "recentEvidenceCount": number,
+        "recentProductTeardownCount": number,
+        "recentDriftPatternCount": number
+      }
+    },
+    "signals": [
+      {
+        "sourceType": "rawInput" | "operatingContext" | "task" | "review" | "evidence" | "productTeardown" | "driftPattern",
+        "sourceId": string,
+        "label": string,
+        "quote": string,
+        "interpretation": string,
+        "strength": "weak" | "medium" | "strong"
+      }
+    ],
+    "hypotheses": [
+      {
+        "statement": string,
+        "confidence": "low" | "medium" | "high",
+        "supportingSignals": string[],
+        "uncertainty": string
+      }
+    ],
+    "candidateComparison": [
+      {
+        "title": string,
+        "whyConsidered": string,
+        "northStarFit": number,
+        "currentFocusFit": number,
+        "evidencePotential": number,
+        "avoidanceRisk": number,
+        "effortLevel": "small" | "medium" | "large",
+        "decision": "recommended" | "alternative" | "rejected",
+        "reason": string
+      }
+    ],
+    "guardrailsApplied": [
+      {
+        "rule": string,
+        "triggeredBy": string,
+        "effect": string
+      }
+    ],
+    "finalDecision": {
+      "selectedTitle": string,
+      "whyThisNow": string,
+      "whyNotOthers": string[],
+      "smallestNextAction": string,
+      "doneWhen": string
+    },
+    "discussionPrompts": string[]
+  },
   "task": {
     "title": string,
     "project": string,
@@ -270,13 +369,20 @@ Rules:
 - Do not give vague encouragement.
 - Do not say empty things like "保持动力" or "持续努力".
 - Every judgment must cite evidence from the input or DecisionContextPack.
+- signals must quote concrete content from rawInput or DecisionContextPack.
+- candidateComparison must contain at least 2 and at most 3 items.
+- whyNotOthers must contain at least 1 and at most 3 items.
+- discussionPrompts must contain at most 3 Chinese prompts that help the user correct your judgment.
 - If a judgment is speculative, lower confidence and say it is a guess in warning or evidence.
 - If context is insufficient, missingQuestions may contain at most 3 questions.
+- If clarificationFeedback is provided, prioritize it when revising inferredRealNeed and finalDecision.
+- If previousNeedClarification is provided, mention what changed from the previous interpretation in decisionTrace.hypotheses or discussionPrompts.
 - Do not generate big empty tasks.
 - nextAction must be an action that can be started within 25 minutes.
 - doneWhen must be observable.
 - Prefer tasks that produce shipping, product_judgment, technical_learning, or system_update evidence.
 - Watch for 泛学习, 信息刷屏, 系统打磨成瘾, and self-deceptive progress.
+- decisionTrace.guardrailsApplied should summarize likely guardrails, including deterministic risk/doNot rules that may be triggered. If none are clear, return [].
 - Do not suggest database, RAG, vector search, Docker, crawler, auth, dashboard, or complex agents unless explicitly requested.
 - task.notes must briefly explain why this task serves the real need.
 - Prefer Chinese field values for user-facing fields.`;
@@ -287,6 +393,8 @@ function buildUserPrompt({
   project,
   currentPhaseContext,
   contextPack,
+  clarificationFeedback,
+  previousNeedClarification,
 }: ClarifyTaskInput) {
   return `Raw vague task:
 ${rawTask}
@@ -302,6 +410,12 @@ ${
 
 DecisionContextPack:
 ${JSON.stringify(contextPack ?? null, null, 2)}
+
+Clarification feedback from user:
+${clarificationFeedback?.trim() || "None"}
+
+Previous needClarification:
+${JSON.stringify(previousNeedClarification ?? null, null, 2)}
 
 Please first perform need extraction, then generate the strict JSON object.`;
 }
@@ -381,6 +495,173 @@ function readCandidateTasks(
   return candidates;
 }
 
+function readDecisionTrace(
+  value: Record<string, unknown>,
+  rawOutput: string,
+): AiDecisionTrace {
+  const contextSummary = readRecord(value.contextSummary, rawOutput);
+  const finalDecision = readRecord(value.finalDecision, rawOutput);
+  const whyNotOthers = readStringArray(
+    finalDecision.whyNotOthers,
+    rawOutput,
+  ).slice(0, 3);
+
+  if (whyNotOthers.length === 0) {
+    throwInvalid(rawOutput);
+  }
+
+  return {
+    decisionQuestion: readString(value.decisionQuestion, rawOutput),
+    contextSummary: {
+      northStar: readString(contextSummary.northStar, rawOutput),
+      currentFocus: readString(contextSummary.currentFocus, rawOutput),
+      antiGoalsUsed: readStringArray(contextSummary.antiGoalsUsed, rawOutput),
+      principlesUsed: readStringArray(contextSummary.principlesUsed, rawOutput),
+      contextStats: readContextStats(contextSummary.contextStats, rawOutput),
+    },
+    signals: readDecisionSignals(value.signals, rawOutput),
+    hypotheses: readHypotheses(value.hypotheses, rawOutput),
+    candidateComparison: readCandidateDecisions(
+      value.candidateComparison,
+      rawOutput,
+    ),
+    guardrailsApplied: readGuardrailsApplied(
+      value.guardrailsApplied,
+      rawOutput,
+    ),
+    finalDecision: {
+      selectedTitle: readString(finalDecision.selectedTitle, rawOutput),
+      whyThisNow: readString(finalDecision.whyThisNow, rawOutput),
+      whyNotOthers,
+      smallestNextAction: readString(
+        finalDecision.smallestNextAction,
+        rawOutput,
+      ),
+      doneWhen: readString(finalDecision.doneWhen, rawOutput),
+    },
+    discussionPrompts: readStringArray(value.discussionPrompts, rawOutput).slice(
+      0,
+      3,
+    ),
+  };
+}
+
+function readDecisionSignals(
+  value: unknown,
+  rawOutput: string,
+): AiDecisionSignal[] {
+  if (!Array.isArray(value)) {
+    throwInvalid(rawOutput);
+  }
+
+  return value.slice(0, 8).map((signal) => {
+    const record = readRecord(signal, rawOutput);
+    const sourceId = readOptionalString(record.sourceId, rawOutput);
+
+    return {
+      sourceType: readEnum(record.sourceType, signalSourceTypes, rawOutput),
+      ...(sourceId ? { sourceId } : {}),
+      label: readString(record.label, rawOutput),
+      quote: readString(record.quote, rawOutput),
+      interpretation: readString(record.interpretation, rawOutput),
+      strength: readEnum(record.strength, signalStrengths, rawOutput),
+    };
+  });
+}
+
+function readHypotheses(
+  value: unknown,
+  rawOutput: string,
+): AiDecisionTrace["hypotheses"] {
+  if (!Array.isArray(value)) {
+    throwInvalid(rawOutput);
+  }
+
+  return value.slice(0, 5).map((hypothesis) => {
+    const record = readRecord(hypothesis, rawOutput);
+
+    return {
+      statement: readString(record.statement, rawOutput),
+      confidence: readConfidence(record.confidence, rawOutput),
+      supportingSignals: readStringArray(record.supportingSignals, rawOutput),
+      uncertainty: readString(record.uncertainty, rawOutput),
+    };
+  });
+}
+
+function readCandidateDecisions(
+  value: unknown,
+  rawOutput: string,
+): AiCandidateDecision[] {
+  if (!Array.isArray(value)) {
+    throwInvalid(rawOutput);
+  }
+
+  const candidates = value.slice(0, 3).map((candidate) => {
+    const record = readRecord(candidate, rawOutput);
+
+    return {
+      title: readString(record.title, rawOutput),
+      whyConsidered: readString(record.whyConsidered, rawOutput),
+      northStarFit: clampScore(readNumber(record.northStarFit, rawOutput)),
+      currentFocusFit: clampScore(readNumber(record.currentFocusFit, rawOutput)),
+      evidencePotential: clampScore(
+        readNumber(record.evidencePotential, rawOutput),
+      ),
+      avoidanceRisk: clampScore(readNumber(record.avoidanceRisk, rawOutput)),
+      effortLevel: readEnum(record.effortLevel, effortLevels, rawOutput),
+      decision: readEnum(record.decision, candidateDecisions, rawOutput),
+      reason: readString(record.reason, rawOutput),
+    };
+  });
+
+  if (candidates.length < 2) {
+    throwInvalid(rawOutput);
+  }
+
+  return candidates;
+}
+
+function readGuardrailsApplied(
+  value: unknown,
+  rawOutput: string,
+): AiGuardrailApplied[] {
+  if (!Array.isArray(value)) {
+    throwInvalid(rawOutput);
+  }
+
+  return value.slice(0, 8).map((guardrail) => {
+    const record = readRecord(guardrail, rawOutput);
+
+    return {
+      rule: readString(record.rule, rawOutput),
+      triggeredBy: readString(record.triggeredBy, rawOutput),
+      effect: readString(record.effect, rawOutput),
+    };
+  });
+}
+
+function readContextStats(
+  value: unknown,
+  rawOutput: string,
+): DecisionContextPack["contextStats"] {
+  const stats = readRecord(value, rawOutput);
+
+  return {
+    activeTaskCount: clampCount(readNumber(stats.activeTaskCount, rawOutput)),
+    recentReviewCount: clampCount(readNumber(stats.recentReviewCount, rawOutput)),
+    recentEvidenceCount: clampCount(
+      readNumber(stats.recentEvidenceCount, rawOutput),
+    ),
+    recentProductTeardownCount: clampCount(
+      readNumber(stats.recentProductTeardownCount, rawOutput),
+    ),
+    recentDriftPatternCount: clampCount(
+      readNumber(stats.recentDriftPatternCount, rawOutput),
+    ),
+  };
+}
+
 function applyDeterministicSafetyRules(
   task: ClarifiedTaskDraft,
   rawTask: string,
@@ -448,6 +729,14 @@ function readString(value: unknown, rawOutput: string) {
   return value.trim();
 }
 
+function readOptionalString(value: unknown, rawOutput: string) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return readString(value, rawOutput);
+}
+
 function readStringArray(value: unknown, rawOutput: string) {
   if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
     throwInvalid(rawOutput);
@@ -470,6 +759,10 @@ function readConfidence(value: unknown, rawOutput: string): NeedConfidence {
 
 function clampScore(value: number) {
   return Math.max(0, Math.min(100, value));
+}
+
+function clampCount(value: number) {
+  return Math.max(0, Math.floor(value));
 }
 
 function readEnum<T extends string>(

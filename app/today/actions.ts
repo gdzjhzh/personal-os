@@ -12,6 +12,7 @@ import type {
   ClarifiedTaskDraft,
   ClarifiedTaskStatus,
   CodexFit,
+  NeedClarification,
   TaskOwner,
   TaskPriority,
   TaskQuadrant,
@@ -44,17 +45,29 @@ export async function clarifyTaskAction(
   try {
     const store = await readStore();
     const contextPack = buildDecisionContextPack(rawTask, store);
+    const project = String(formData.get("project") || "Personal SaaS OS");
+    const currentPhaseContext = String(
+      formData.get("currentPhaseContext") || "",
+    );
+    const reasoningEffort = readReasoningEffort(formData);
     const result = await clarifyTask({
       rawTask,
-      project: String(formData.get("project") || "Personal SaaS OS"),
-      currentPhaseContext: String(formData.get("currentPhaseContext") || ""),
-      reasoningEffort: readReasoningEffort(formData),
+      project,
+      currentPhaseContext,
+      reasoningEffort,
       contextPack,
+      clarificationFeedback: String(
+        formData.get("clarificationFeedback") || "",
+      ).trim(),
+      previousNeedClarification: parsePreviousNeedClarification(
+        String(formData.get("previousNeedClarificationJson") || ""),
+      ),
     });
 
     return {
       status: "success",
       needClarification: result.needClarification,
+      decisionTrace: result.decisionTrace,
       task: result.task,
       rawOutput: result.rawOutput,
       contextStats: contextPack.contextStats,
@@ -72,6 +85,29 @@ export async function clarifyTaskAction(
       status: "error",
       message: "AI 请求失败，请检查网络、API Key 或模型配置。",
     };
+  }
+}
+
+function parsePreviousNeedClarification(value: string): NeedClarification | undefined {
+  if (!value.trim()) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Partial<NeedClarification>;
+
+    if (
+      typeof parsed.understoodInput !== "string" ||
+      typeof parsed.recommendation !== "string" ||
+      typeof parsed.inferredRealNeed !== "object" ||
+      parsed.inferredRealNeed === null
+    ) {
+      return undefined;
+    }
+
+    return parsed as NeedClarification;
+  } catch {
+    return undefined;
   }
 }
 
