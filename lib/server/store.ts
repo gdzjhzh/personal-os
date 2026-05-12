@@ -109,6 +109,19 @@ export async function updateTask(id: string, patch: UpdateTaskPatch) {
   return next;
 }
 
+export async function deleteTask(id: string) {
+  const store = await readStore();
+  const nextTasks = store.tasks.filter((task) => task.id !== id);
+
+  if (nextTasks.length === store.tasks.length) {
+    return false;
+  }
+
+  store.tasks = nextTasks;
+  await writeStore(store);
+  return true;
+}
+
 export async function createReview(input: CreateReviewInput) {
   const store = await readStore();
   const review = {

@@ -23,6 +23,7 @@ import {
   createAiWeeklyReview,
   createTask,
   createReview,
+  deleteTask,
   exportDailyMarkdown,
   readStore,
   TASK_STATUSES,
@@ -49,6 +50,7 @@ type TodayPageProps = {
     aiReview?: string;
     aiReviewError?: string;
     created?: string;
+    deleted?: string;
     exported?: string;
   }>;
 };
@@ -754,6 +756,21 @@ function TaskPoolItem({
               </button>
             </form>
           ) : null}
+          <details className="min-w-28">
+            <summary className={`${dangerButtonClassName} list-none cursor-pointer`}>
+              删除
+            </summary>
+            <form action={deleteTaskAction} className="mt-1 grid gap-1">
+              <input type="hidden" name="id" value={task.id} />
+              <button
+                aria-label={`确认删除任务 ${task.title}`}
+                className={dangerButtonClassName}
+                type="submit"
+              >
+                确认删除
+              </button>
+            </form>
+          </details>
         </div>
       </div>
 
@@ -1206,6 +1223,20 @@ async function updateTaskStatusAction(formData: FormData) {
   revalidatePath("/today");
 }
 
+async function deleteTaskAction(formData: FormData) {
+  "use server";
+
+  const id = getFormValue(formData, "id");
+
+  if (!id) {
+    return;
+  }
+
+  await deleteTask(id);
+  revalidatePath("/today");
+  redirect("/today?view=tasks&deleted=task");
+}
+
 async function createTaskAction(formData: FormData) {
   "use server";
 
@@ -1399,6 +1430,7 @@ function getNotices(params?: {
   aiReview?: string;
   aiReviewError?: string;
   created?: string;
+  deleted?: string;
   exported?: string;
 }) {
   const notices: string[] = [];
@@ -1413,6 +1445,10 @@ function getNotices(params?: {
 
   if (params?.created === "ai-error") {
     notices.push("AI 整理后的任务写入失败，请重新生成预览。");
+  }
+
+  if (params?.deleted === "task") {
+    notices.push("任务已删除。");
   }
 
   if (params?.review === "saved") {
@@ -1671,6 +1707,8 @@ const actionButtonClassName =
   "min-h-8 border border-zinc-800 px-2.5 py-1.5 text-xs font-medium text-zinc-300 hover:border-emerald-500 hover:text-emerald-300";
 const activeActionButtonClassName =
   "min-h-8 border border-emerald-700 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-300";
+const dangerButtonClassName =
+  "min-h-8 border border-red-950 px-2.5 py-1.5 text-xs font-medium text-red-300 hover:border-red-700 hover:bg-red-950/40 hover:text-red-200";
 const inputClassName =
   "border border-zinc-800 bg-black px-2 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500";
 const textareaClassName =
