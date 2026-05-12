@@ -95,6 +95,8 @@ export function AiTaskClarifier({
         </div>
       </form>
 
+      {isPending ? <PendingClarifierStatus /> : null}
+
       {state.status === "error" ? (
         <div className="grid gap-2 border border-red-900 bg-red-950/30 p-3 text-sm text-red-200">
           <p>{state.message}</p>
@@ -144,6 +146,25 @@ type ClarifierContextStats = Extract<
   AiTaskClarifierState,
   { status: "success" }
 >["contextStats"];
+
+function PendingClarifierStatus() {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="border border-amber-900 bg-amber-950/25 px-3 py-2 text-sm leading-6 text-amber-100">
+      正在请求 DeepSeek，已等待 {seconds} 秒。网络连接会自动重试，超过约 25 秒会返回明确错误。
+    </div>
+  );
+}
 
 function NeedClarificationPreview({
   need,

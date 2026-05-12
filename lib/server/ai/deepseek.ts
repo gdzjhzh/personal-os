@@ -42,8 +42,9 @@ export type DeepSeekModelInfo = {
   defaultReasoningEffort: DeepSeekReasoningEffort;
 };
 
-const DEEPSEEK_MAX_ATTEMPTS = 3;
-const DEEPSEEK_RETRY_DELAYS_MS = [800, 1600];
+const DEEPSEEK_MAX_ATTEMPTS = 2;
+const DEEPSEEK_ATTEMPT_TIMEOUT_MS = 12000;
+const DEEPSEEK_RETRY_DELAYS_MS = [800];
 
 export class MissingDeepSeekApiKeyError extends Error {
   constructor() {
@@ -105,6 +106,12 @@ export async function createDeepSeekChatCompletion({
   let response: Response | null = null;
 
   for (let attempt = 1; attempt <= DEEPSEEK_MAX_ATTEMPTS; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      DEEPSEEK_ATTEMPT_TIMEOUT_MS,
+    );
+
     try {
       response = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",
@@ -113,9 +120,11 @@ export async function createDeepSeekChatCompletion({
           "Content-Type": "application/json",
         },
         body,
+        signal: controller.signal,
       });
     } catch (error) {
       const shouldRetry = attempt < DEEPSEEK_MAX_ATTEMPTS;
+      const details = formatNetworkErrorDetails(error);
 
       console.warn("[ai.deepseek] request:network_error", {
         requestId,
@@ -123,16 +132,23 @@ export async function createDeepSeekChatCompletion({
         attempt,
         maxAttempts: DEEPSEEK_MAX_ATTEMPTS,
         retry: shouldRetry,
+        attemptTimeoutMs: DEEPSEEK_ATTEMPT_TIMEOUT_MS,
         elapsedMs: Date.now() - startedAt,
         error: describeError(error),
       });
 
       if (!shouldRetry) {
-        throw error;
+        throw new DeepSeekRequestError(
+          "DeepSeek network request failed",
+          undefined,
+          details,
+        );
       }
 
       await delay(DEEPSEEK_RETRY_DELAYS_MS[attempt - 1] || 0);
       continue;
+    } finally {
+      clearTimeout(timeout);
     }
 
     if (response.ok) {
@@ -244,6 +260,15 @@ function readDeepSeekErrorMessage(value: string) {
 
 function isRetryableDeepSeekStatus(status: number) {
   return status === 408 || status === 429 || status >= 500;
+}
+
+function formatNetworkErrorDetails(error: unknown) {
+  const details = describeError(error);
+  const cause = details.cause
+    ? ` / cause=${details.cause.name}: ${details.cause.message}`
+    : "";
+
+  return `network_error / ${details.name}: ${details.message}${cause}`;
 }
 
 async function delay(ms: number) {
