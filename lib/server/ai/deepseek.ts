@@ -6,15 +6,23 @@ type DeepSeekMessage = {
 type DeepSeekChatCompletionOptions = {
   messages: DeepSeekMessage[];
   reasoningEffort?: DeepSeekReasoningEffort;
+  requestId?: string;
   responseFormat?: "json_object";
 };
 
 type DeepSeekChatCompletionResponse = {
+  id?: string;
+  model?: string;
   choices?: Array<{
     message?: {
       content?: string;
     };
   }>;
+  usage?: {
+    completion_tokens?: number;
+    prompt_tokens?: number;
+    total_tokens?: number;
+  };
 };
 
 export type DeepSeekReasoningEffort = "high" | "max";
@@ -50,43 +58,76 @@ export class DeepSeekRequestError extends Error {
 export async function createDeepSeekChatCompletion({
   messages,
   reasoningEffort = readReasoningEffortFromEnv(),
+  requestId = createDeepSeekRequestId(),
   responseFormat,
 }: DeepSeekChatCompletionOptions) {
+  const startedAt = Date.now();
   const apiKey =
     process.env.DEEPSEEK_API_KEY?.trim() || process.env.PSOS_AI_API_KEY?.trim();
 
   if (!apiKey) {
+    console.warn("[ai.deepseek] request:missing_key", { requestId });
     throw new MissingDeepSeekApiKeyError();
   }
 
   const model = normalizeDeepSeekModel(
     process.env.DEEPSEEK_MODEL?.trim() || "deepseek-v4-pro",
   );
-  const response = await fetch("https://api.deepseek.com/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      thinking: { type: "enabled" },
-      reasoning_effort: reasoningEffort,
-      ...(responseFormat
-        ? { response_format: { type: responseFormat } }
-        : {}),
-      stream: false,
-    }),
+  console.info("[ai.deepseek] request:start", {
+    requestId,
+    model,
+    reasoningEffort,
+    responseFormat: responseFormat || null,
+    messageCount: messages.length,
+    promptChars: messages.reduce((total, message) => total + message.content.length, 0),
   });
+
+  let response: Response;
+
+  try {
+    response = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        thinking: { type: "enabled" },
+        reasoning_effort: reasoningEffort,
+        ...(responseFormat
+          ? { response_format: { type: responseFormat } }
+          : {}),
+        stream: false,
+      }),
+    });
+  } catch (error) {
+    console.error("[ai.deepseek] request:network_error", {
+      requestId,
+      model,
+      elapsedMs: Date.now() - startedAt,
+      error: describeError(error),
+    });
+    throw error;
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
+    const details = readDeepSeekErrorMessage(errorText);
+
+    console.warn("[ai.deepseek] request:http_error", {
+      requestId,
+      model,
+      status: response.status,
+      elapsedMs: Date.now() - startedAt,
+      details,
+    });
 
     throw new DeepSeekRequestError(
       `DeepSeek request failed with ${response.status}`,
       response.status,
-      readDeepSeekErrorMessage(errorText),
+      details,
     );
   }
 
@@ -94,8 +135,23 @@ export async function createDeepSeekChatCompletion({
   const content = data.choices?.[0]?.message?.content;
 
   if (!content) {
+    console.warn("[ai.deepseek] request:empty_content", {
+      requestId,
+      model: data.model || model,
+      responseId: data.id || null,
+      elapsedMs: Date.now() - startedAt,
+    });
     throw new DeepSeekRequestError("DeepSeek returned no content");
   }
+
+  console.info("[ai.deepseek] request:success", {
+    requestId,
+    model: data.model || model,
+    responseId: data.id || null,
+    elapsedMs: Date.now() - startedAt,
+    contentChars: content.length,
+    usage: data.usage || null,
+  });
 
   return content;
 }
@@ -144,4 +200,22 @@ function readDeepSeekErrorMessage(value: string) {
   } catch {
     return value.slice(0, 240);
   }
+}
+
+function createDeepSeekRequestId() {
+  return `ds_${Date.now().toString(36)}_${crypto.randomUUID().slice(0, 8)}`;
+}
+
+function describeError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+    };
+  }
+
+  return {
+    name: typeof error,
+    message: String(error),
+  };
 }

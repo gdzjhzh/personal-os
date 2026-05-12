@@ -24,6 +24,7 @@ type ClarifyTaskInput = {
   project?: string;
   currentPhaseContext?: string;
   reasoningEffort?: DeepSeekReasoningEffort;
+  requestId?: string;
   contextPack?: DecisionContextPack;
   clarificationFeedback?: string;
   previousNeedClarification?: NeedClarification;
@@ -112,6 +113,7 @@ export async function clarifyTask(
   try {
     const rawOutput = await createDeepSeekChatCompletion({
       reasoningEffort: input.reasoningEffort,
+      requestId: input.requestId,
       responseFormat: "json_object",
       messages: [
         {
@@ -128,6 +130,14 @@ export async function clarifyTask(
     return parseClarifierResult(rawOutput, input);
   } catch (error) {
     if (error instanceof TaskClarifierError) {
+      if (error.code === "invalid_json") {
+        console.warn("[ai.taskClarifier] parse:invalid_output", {
+          requestId: input.requestId || null,
+          rawOutputChars: error.rawOutput?.length || 0,
+          rawOutputPreview: previewLogText(error.rawOutput || ""),
+        });
+      }
+
       throw error;
     }
 
@@ -980,4 +990,8 @@ function throwInvalid(rawOutput: string): never {
     "AI 返回内容不是合法 JSON，请调整任务描述后重试。",
     rawOutput,
   );
+}
+
+function previewLogText(value: string) {
+  return value.replace(/\s+/g, " ").trim().slice(0, 320);
 }

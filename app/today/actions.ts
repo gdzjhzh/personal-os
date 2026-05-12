@@ -34,6 +34,8 @@ export async function clarifyTaskAction(
   formData: FormData,
 ): Promise<AiTaskClarifierState> {
   const rawTask = String(formData.get("rawTask") || "").trim();
+  const requestId = createAiTaskRequestId();
+  const startedAt = Date.now();
 
   if (!rawTask) {
     return {
@@ -42,26 +44,49 @@ export async function clarifyTaskAction(
     };
   }
 
+  const project = String(formData.get("project") || "Personal SaaS OS");
+  const currentPhaseContext = String(
+    formData.get("currentPhaseContext") || "",
+  );
+  const reasoningEffort = readReasoningEffort(formData);
+  const clarificationFeedback = String(
+    formData.get("clarificationFeedback") || "",
+  ).trim();
+  const previousNeedClarification = parsePreviousNeedClarification(
+    String(formData.get("previousNeedClarificationJson") || ""),
+  );
+
   try {
     const store = await readStore();
     const contextPack = buildDecisionContextPack(rawTask, store);
-    const project = String(formData.get("project") || "Personal SaaS OS");
-    const currentPhaseContext = String(
-      formData.get("currentPhaseContext") || "",
-    );
-    const reasoningEffort = readReasoningEffort(formData);
+
+    console.info("[ai.taskClarifier] action:start", {
+      requestId,
+      rawTaskChars: rawTask.length,
+      project,
+      reasoningEffort,
+      hasCurrentPhaseContext: Boolean(currentPhaseContext.trim()),
+      hasClarificationFeedback: Boolean(clarificationFeedback),
+      hasPreviousClarification: Boolean(previousNeedClarification),
+      contextStats: contextPack.contextStats,
+    });
+
     const result = await clarifyTask({
       rawTask,
       project,
       currentPhaseContext,
       reasoningEffort,
+      requestId,
       contextPack,
-      clarificationFeedback: String(
-        formData.get("clarificationFeedback") || "",
-      ).trim(),
-      previousNeedClarification: parsePreviousNeedClarification(
-        String(formData.get("previousNeedClarificationJson") || ""),
-      ),
+      clarificationFeedback,
+      previousNeedClarification,
+    });
+
+    console.info("[ai.taskClarifier] action:success", {
+      requestId,
+      elapsedMs: Date.now() - startedAt,
+      selectedTitle: result.task.title,
+      rawOutputChars: result.rawOutput.length,
     });
 
     return {
@@ -74,12 +99,26 @@ export async function clarifyTaskAction(
     };
   } catch (error) {
     if (isTaskClarifierError(error)) {
+      console.warn("[ai.taskClarifier] action:error", {
+        requestId,
+        elapsedMs: Date.now() - startedAt,
+        code: error.code,
+        message: error.message,
+        rawOutputChars: error.rawOutput?.length || 0,
+      });
+
       return {
         status: "error",
         message: error.message,
         rawOutput: error.rawOutput,
       };
     }
+
+    console.error("[ai.taskClarifier] action:unknown_error", {
+      requestId,
+      elapsedMs: Date.now() - startedAt,
+      error: describeError(error),
+    });
 
     return {
       status: "error",
@@ -135,6 +174,24 @@ function isTaskClarifierError(error: unknown): error is TaskClarifierError {
 
 function readReasoningEffort(formData: FormData): DeepSeekReasoningEffort {
   return formData.get("reasoningEffort") === "max" ? "max" : "high";
+}
+
+function createAiTaskRequestId() {
+  return `clarify_${Date.now().toString(36)}_${crypto.randomUUID().slice(0, 8)}`;
+}
+
+function describeError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+    };
+  }
+
+  return {
+    name: typeof error,
+    message: String(error),
+  };
 }
 
 function inferQuadrantFromPriorityAndRiskFlags(
