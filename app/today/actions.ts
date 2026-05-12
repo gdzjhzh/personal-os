@@ -71,16 +71,24 @@ export async function clarifyTaskAction(
       contextStats: contextPack.contextStats,
     });
 
-    const result = await clarifyTask({
-      rawTask,
-      project,
-      currentPhaseContext,
-      reasoningEffort,
-      requestId,
-      contextPack,
-      clarificationFeedback,
-      previousNeedClarification,
-    });
+    const result = await withTimeout(
+      clarifyTask({
+        rawTask,
+        project,
+        currentPhaseContext,
+        reasoningEffort,
+        requestId,
+        contextPack,
+        clarificationFeedback,
+        previousNeedClarification,
+      }),
+      28000,
+      () =>
+        new TaskClarifierError(
+          "request_failed",
+          "AI 请求超时：DeepSeek 连接长时间没有返回。请稍后重试，或把整理等级调成 high。",
+        ),
+    );
 
     console.info("[ai.taskClarifier] action:success", {
       requestId,
@@ -192,6 +200,27 @@ function describeError(error: unknown) {
     name: typeof error,
     message: String(error),
   };
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  createError: () => Error,
+) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => reject(createError()), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 function inferQuadrantFromPriorityAndRiskFlags(
