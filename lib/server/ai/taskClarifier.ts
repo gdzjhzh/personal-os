@@ -2,6 +2,9 @@ import type {
   ClarifiedTaskDraft,
   ClarifiedTaskStatus,
   CodexFit,
+  DecisionContextPack,
+  NeedClarification,
+  NeedConfidence,
   TaskOwner,
   TaskPriority,
 } from "@/lib/types";
@@ -17,9 +20,11 @@ type ClarifyTaskInput = {
   project?: string;
   currentPhaseContext?: string;
   reasoningEffort?: DeepSeekReasoningEffort;
+  contextPack?: DecisionContextPack;
 };
 
 type ClarifyTaskSuccess = {
+  needClarification: NeedClarification;
   task: ClarifiedTaskDraft;
   rawOutput: string;
 };
@@ -84,10 +89,7 @@ export async function clarifyTask(
       ],
     });
 
-    return {
-      task: parseClarifiedTask(rawOutput, input),
-      rawOutput,
-    };
+    return parseClarifierResult(rawOutput, input);
   } catch (error) {
     if (error instanceof TaskClarifierError) {
       throw error;
@@ -137,10 +139,10 @@ export async function clarifyTask(
   }
 }
 
-function parseClarifiedTask(
+function parseClarifierResult(
   rawOutput: string,
   input: ClarifyTaskInput = { rawTask: "" },
-) {
+): ClarifyTaskSuccess {
   let parsed: unknown;
 
   try {
@@ -157,62 +159,134 @@ function parseClarifiedTask(
     throwInvalid(rawOutput);
   }
 
+  if (!isRecord(parsed.needClarification) || !isRecord(parsed.task)) {
+    throwInvalid(rawOutput);
+  }
+
+  return {
+    needClarification: readNeedClarification(parsed.needClarification, rawOutput),
+    task: parseClarifiedTask(parsed.task, rawOutput, input),
+    rawOutput,
+  };
+}
+
+function parseClarifiedTask(
+  value: unknown,
+  rawOutput: string,
+  input: ClarifyTaskInput,
+) {
+  if (!isRecord(value)) {
+    throwInvalid(rawOutput);
+  }
+
   const task: ClarifiedTaskDraft = {
-    title: readString(parsed.title, rawOutput),
-    project: readString(parsed.project, rawOutput) || normalizedProject(input),
-    priority: readEnum(parsed.priority, priorities, rawOutput),
-    status: readEnum(parsed.status, statuses, rawOutput),
-    codexFit: readEnum(parsed.codexFit, codexFits, rawOutput),
-    owner: readEnum(parsed.owner, owners, rawOutput),
-    nextAction: readString(parsed.nextAction, rawOutput),
-    doneWhen: readString(parsed.doneWhen, rawOutput),
-    riskFlags: readStringArray(parsed.riskFlags, rawOutput),
-    doNot: readStringArray(parsed.doNot, rawOutput),
-    notes: readString(parsed.notes, rawOutput),
+    title: readString(value.title, rawOutput),
+    project: readString(value.project, rawOutput) || normalizedProject(input),
+    priority: readEnum(value.priority, priorities, rawOutput),
+    status: readEnum(value.status, statuses, rawOutput),
+    codexFit: readEnum(value.codexFit, codexFits, rawOutput),
+    owner: readEnum(value.owner, owners, rawOutput),
+    nextAction: readString(value.nextAction, rawOutput),
+    doneWhen: readString(value.doneWhen, rawOutput),
+    riskFlags: readStringArray(value.riskFlags, rawOutput),
+    doNot: readStringArray(value.doNot, rawOutput),
+    notes: readString(value.notes, rawOutput),
   };
 
   return applyDeterministicSafetyRules(task, input.rawTask);
 }
 
 function buildSystemPrompt() {
-  return `You are an AI Task Clarifier for Personal SaaS OS.
+  return `You are Personal OS's personal execution coach, not a generic Todo generator.
+The user's long-term north star is: become an independent SaaS product creator and gradually build a second growth curve.
+Your job is not to directly rewrite the input into task fields. You must first perform need extraction from the user's personal context, then generate one executable task.
 
-The user wants to become an independent SaaS product creator. Current phase: make Personal SaaS OS a daily-used task planning and review system. The system should reduce drifting, vague learning, information browsing, and self-deception. Tasks must be converted into concrete next actions and observable outputs.
+Before generating the task, judge:
+1. What the user truly wants to move forward.
+2. What the user may be avoiding.
+3. How this input relates to northStar and currentFocus.
+4. Which recent tasks, reviews, evidence, product teardowns, or drift patterns support that judgment.
+5. What the smallest real action for today is.
 
 Return ONLY strict JSON. Do not include markdown, comments, code fences, or explanations.
 
 The JSON must match this exact structure:
 {
-  "title": string,
-  "project": string,
-  "priority": "P0" | "P1" | "P2",
-  "status": "inbox" | "active" | "codex_ready" | "waiting" | "frozen",
-  "codexFit": "high" | "medium" | "low" | "none",
-  "owner": "human" | "codex" | "mixed",
-  "nextAction": string,
-  "doneWhen": string,
-  "riskFlags": string[],
-  "doNot": string[],
-  "notes": string
+  "needClarification": {
+    "understoodInput": string,
+    "inferredRealNeed": {
+      "statement": string,
+      "confidence": "low" | "medium" | "high",
+      "evidence": string[]
+    },
+    "possibleAvoidance": {
+      "pattern": string,
+      "evidence": string[],
+      "warning": string
+    },
+    "alignment": {
+      "northStarFit": number,
+      "currentFocusFit": number,
+      "whyThisMatters": string
+    },
+    "contextUsed": {
+      "operatingContext": string[],
+      "tasks": string[],
+      "reviews": string[],
+      "evidence": string[],
+      "productTeardowns": string[],
+      "driftPatterns": string[]
+    },
+    "missingQuestions": string[],
+    "candidateTasks": [
+      {
+        "title": string,
+        "whyThisTask": string,
+        "nextAction": string,
+        "doneWhen": string,
+        "riskFlags": string[],
+        "recommended": boolean
+      }
+    ],
+    "recommendation": string
+  },
+  "task": {
+    "title": string,
+    "project": string,
+    "priority": "P0" | "P1" | "P2",
+    "status": "inbox" | "active" | "codex_ready" | "waiting" | "frozen",
+    "codexFit": "high" | "medium" | "low" | "none",
+    "owner": "human" | "codex" | "mixed",
+    "nextAction": string,
+    "doneWhen": string,
+    "riskFlags": string[],
+    "doNot": string[],
+    "notes": string
+  }
 }
 
 Rules:
-- The task must become concrete.
-- nextAction must be a 25-minute action.
+- Understand first, then generate the task.
+- Do not give vague encouragement.
+- Do not say empty things like "保持动力" or "持续努力".
+- Every judgment must cite evidence from the input or DecisionContextPack.
+- If a judgment is speculative, lower confidence and say it is a guess in warning or evidence.
+- If context is insufficient, missingQuestions may contain at most 3 questions.
+- Do not generate big empty tasks.
+- nextAction must be an action that can be started within 25 minutes.
 - doneWhen must be observable.
-- If the task is vague learning, add riskFlags: ["泛学习"].
-- If the task involves browsing products or websites, add riskFlags: ["信息刷屏"].
-- If the task is too large, add riskFlags: ["任务过大"].
-- If it is suitable for Codex, codexFit should be high or medium.
-- If it requires human judgment, owner should be human or mixed.
-- Never suggest RAG, vector search, database, Docker, crawler, auth, or dashboard unless explicitly asked.
-- Prefer Chinese field values for title, nextAction, doneWhen, riskFlags, doNot, and notes.`;
+- Prefer tasks that produce shipping, product_judgment, technical_learning, or system_update evidence.
+- Watch for 泛学习, 信息刷屏, 系统打磨成瘾, and self-deceptive progress.
+- Do not suggest database, RAG, vector search, Docker, crawler, auth, dashboard, or complex agents unless explicitly requested.
+- task.notes must briefly explain why this task serves the real need.
+- Prefer Chinese field values for user-facing fields.`;
 }
 
 function buildUserPrompt({
   rawTask,
   project,
   currentPhaseContext,
+  contextPack,
 }: ClarifyTaskInput) {
   return `Raw vague task:
 ${rawTask}
@@ -226,7 +300,85 @@ ${
   "Build the simplest local V0 and use it daily. Keep scope small."
 }
 
-Clarify this into the strict JSON task object.`;
+DecisionContextPack:
+${JSON.stringify(contextPack ?? null, null, 2)}
+
+Please first perform need extraction, then generate the strict JSON object.`;
+}
+
+function readNeedClarification(
+  value: Record<string, unknown>,
+  rawOutput: string,
+): NeedClarification {
+  const inferredRealNeed = readRecord(value.inferredRealNeed, rawOutput);
+  const possibleAvoidance = readRecord(value.possibleAvoidance, rawOutput);
+  const alignment = readRecord(value.alignment, rawOutput);
+  const contextUsed = readRecord(value.contextUsed, rawOutput);
+
+  return {
+    understoodInput: readString(value.understoodInput, rawOutput),
+    inferredRealNeed: {
+      statement: readString(inferredRealNeed.statement, rawOutput),
+      confidence: readConfidence(inferredRealNeed.confidence, rawOutput),
+      evidence: readStringArray(inferredRealNeed.evidence, rawOutput),
+    },
+    possibleAvoidance: {
+      pattern: readString(possibleAvoidance.pattern, rawOutput),
+      evidence: readStringArray(possibleAvoidance.evidence, rawOutput),
+      warning: readString(possibleAvoidance.warning, rawOutput),
+    },
+    alignment: {
+      northStarFit: clampScore(readNumber(alignment.northStarFit, rawOutput)),
+      currentFocusFit: clampScore(readNumber(alignment.currentFocusFit, rawOutput)),
+      whyThisMatters: readString(alignment.whyThisMatters, rawOutput),
+    },
+    contextUsed: {
+      operatingContext: readStringArray(contextUsed.operatingContext, rawOutput),
+      tasks: readStringArray(contextUsed.tasks, rawOutput),
+      reviews: readStringArray(contextUsed.reviews, rawOutput),
+      evidence: readStringArray(contextUsed.evidence, rawOutput),
+      productTeardowns: readStringArray(contextUsed.productTeardowns, rawOutput),
+      driftPatterns: readStringArray(contextUsed.driftPatterns, rawOutput),
+    },
+    missingQuestions: readStringArray(value.missingQuestions, rawOutput).slice(
+      0,
+      3,
+    ),
+    candidateTasks: readCandidateTasks(value.candidateTasks, rawOutput),
+    recommendation: readString(value.recommendation, rawOutput),
+  };
+}
+
+function readCandidateTasks(
+  value: unknown,
+  rawOutput: string,
+): NeedClarification["candidateTasks"] {
+  if (!Array.isArray(value)) {
+    throwInvalid(rawOutput);
+  }
+
+  const candidates = value.slice(0, 3).map((candidate) => {
+    const record = readRecord(candidate, rawOutput);
+
+    if (typeof record.recommended !== "boolean") {
+      throwInvalid(rawOutput);
+    }
+
+    return {
+      title: readString(record.title, rawOutput),
+      whyThisTask: readString(record.whyThisTask, rawOutput),
+      nextAction: readString(record.nextAction, rawOutput),
+      doneWhen: readString(record.doneWhen, rawOutput),
+      riskFlags: readStringArray(record.riskFlags, rawOutput),
+      recommended: record.recommended,
+    };
+  });
+
+  if (candidates.length === 0) {
+    throwInvalid(rawOutput);
+  }
+
+  return candidates;
 }
 
 function applyDeterministicSafetyRules(
@@ -249,10 +401,15 @@ function applyDeterministicSafetyRules(
 
   if (/网站|产品|竞品|网页|浏览|刷|搜索|Google|YouTube|Twitter|X\b/i.test(mergedText)) {
     riskFlags.add("信息刷屏");
+    doNot.add("不要无限浏览");
   }
 
   if (/完整|全部|系统|平台|重构|做完|从零|上线|发布/.test(mergedText)) {
     riskFlags.add("任务过大");
+  }
+
+  if (/优化系统|重构系统|整理系统|配置|框架|架构|自动化|仪表盘/.test(mergedText)) {
+    riskFlags.add("系统打磨风险");
   }
 
   for (const item of forbiddenSuggestions) {
@@ -275,6 +432,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function readRecord(value: unknown, rawOutput: string) {
+  if (!isRecord(value)) {
+    throwInvalid(rawOutput);
+  }
+
+  return value;
+}
+
 function readString(value: unknown, rawOutput: string) {
   if (typeof value !== "string") {
     throwInvalid(rawOutput);
@@ -289,6 +454,22 @@ function readStringArray(value: unknown, rawOutput: string) {
   }
 
   return value.map((item) => item.trim()).filter(Boolean);
+}
+
+function readNumber(value: unknown, rawOutput: string) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throwInvalid(rawOutput);
+  }
+
+  return value;
+}
+
+function readConfidence(value: unknown, rawOutput: string): NeedConfidence {
+  return readEnum(value, ["low", "medium", "high"], rawOutput);
+}
+
+function clampScore(value: number) {
+  return Math.max(0, Math.min(100, value));
 }
 
 function readEnum<T extends string>(

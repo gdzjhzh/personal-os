@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import type { DeepSeekReasoningEffort } from "@/lib/server/ai/deepseek";
+import { buildDecisionContextPack } from "@/lib/server/ai/decisionContext";
 import { clarifyTask, TaskClarifierError } from "@/lib/server/ai/taskClarifier";
-import { createTask } from "@/lib/server/store";
+import { createTask, readStore } from "@/lib/server/store";
 import type {
   AiTaskClarifierState,
   ClarifiedTaskDraft,
@@ -41,17 +42,22 @@ export async function clarifyTaskAction(
   }
 
   try {
+    const store = await readStore();
+    const contextPack = buildDecisionContextPack(rawTask, store);
     const result = await clarifyTask({
       rawTask,
       project: String(formData.get("project") || "Personal SaaS OS"),
       currentPhaseContext: String(formData.get("currentPhaseContext") || ""),
       reasoningEffort: readReasoningEffort(formData),
+      contextPack,
     });
 
     return {
       status: "success",
+      needClarification: result.needClarification,
       task: result.task,
       rawOutput: result.rawOutput,
+      contextStats: contextPack.contextStats,
     };
   } catch (error) {
     if (isTaskClarifierError(error)) {

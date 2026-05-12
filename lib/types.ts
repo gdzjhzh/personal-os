@@ -179,6 +179,128 @@ export type Store = {
   operatingContext: OperatingContext;
 };
 
+export type DecisionContextTaskSnapshot = {
+  id: string;
+  code: string;
+  title: string;
+  project: string;
+  priority: TaskPriority;
+  status: TaskStatus;
+  nextAction: string;
+  doneWhen: string;
+  riskFlags: string[];
+  updatedAt: string;
+  plannedFor?: string;
+};
+
+export type DecisionContextReviewSnapshot = {
+  date: string;
+  plannedP0?: string;
+  actualOutput: string;
+  fakeProgress: string;
+  driftFlags: string[];
+  tomorrowP0: string;
+  notes: string;
+  createdAt: string;
+};
+
+export type DecisionContextEvidenceSnapshot = {
+  id: string;
+  date: string;
+  type: string;
+  title: string;
+  description: string;
+  taskId?: string;
+  createdAt: string;
+};
+
+export type DecisionContextProductTeardownSnapshot = {
+  id: string;
+  date: string;
+  productName: string;
+  problem: string;
+  targetUser: string;
+  whyUsersNeedIt: string;
+  revenueSignal: string;
+  whatILearned: string;
+  hardPart: string;
+  alternativeApproach: string;
+  canIBuildIt: string;
+  coldStartStrategy: string;
+  notes?: string;
+  createdAt: string;
+};
+
+export type DecisionContextDriftPattern = {
+  pattern: string;
+  count: number;
+  evidence: string[];
+};
+
+export type DecisionContextPack = {
+  rawInput: string;
+  generatedAt: string;
+  operatingContext: {
+    northStar: string;
+    currentFocus: string;
+    activeConstraints: string[];
+    antiGoals: string[];
+    principles: string[];
+    updatedAt: string;
+  };
+  activeTasks: DecisionContextTaskSnapshot[];
+  recentReviews: DecisionContextReviewSnapshot[];
+  recentEvidence: DecisionContextEvidenceSnapshot[];
+  recentProductTeardowns: DecisionContextProductTeardownSnapshot[];
+  recentDriftPatterns: DecisionContextDriftPattern[];
+  contextStats: {
+    activeTaskCount: number;
+    recentReviewCount: number;
+    recentEvidenceCount: number;
+    recentProductTeardownCount: number;
+    recentDriftPatternCount: number;
+  };
+};
+
+export type NeedConfidence = "low" | "medium" | "high";
+
+export type NeedClarification = {
+  understoodInput: string;
+  inferredRealNeed: {
+    statement: string;
+    confidence: NeedConfidence;
+    evidence: string[];
+  };
+  possibleAvoidance: {
+    pattern: string;
+    evidence: string[];
+    warning: string;
+  };
+  alignment: {
+    northStarFit: number;
+    currentFocusFit: number;
+    whyThisMatters: string;
+  };
+  contextUsed: {
+    operatingContext: string[];
+    tasks: string[];
+    reviews: string[];
+    evidence: string[];
+    productTeardowns: string[];
+    driftPatterns: string[];
+  };
+  missingQuestions: string[];
+  candidateTasks: Array<{
+    title: string;
+    whyThisTask: string;
+    nextAction: string;
+    doneWhen: string;
+    riskFlags: string[];
+    recommended: boolean;
+  }>;
+  recommendation: string;
+};
+
 export type CreateTaskInput = {
   title: string;
   project?: string;
@@ -239,8 +361,10 @@ export type AiTaskClarifierState =
     }
   | {
       status: "success";
+      needClarification: NeedClarification;
       task: ClarifiedTaskDraft;
       rawOutput: string;
+      contextStats?: DecisionContextPack["contextStats"];
     }
   | {
       status: "error";

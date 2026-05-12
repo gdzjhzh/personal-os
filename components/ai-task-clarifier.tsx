@@ -12,7 +12,11 @@ import {
   clarifyTaskAction,
   saveClarifiedTaskAction,
 } from "@/app/today/actions";
-import type { AiTaskClarifierState, ClarifiedTaskDraft } from "@/lib/types";
+import type {
+  AiTaskClarifierState,
+  ClarifiedTaskDraft,
+  NeedClarification,
+} from "@/lib/types";
 import type {
   DeepSeekModelInfo,
   DeepSeekReasoningEffort,
@@ -39,10 +43,10 @@ export function AiTaskClarifier({
     <section className="grid gap-3 border border-zinc-800 bg-black/80 p-4">
       <div className="grid gap-1">
         <h2 className="text-base font-semibold text-zinc-100">
-          AI 整理模糊任务
+          AI 澄清真实需求并生成任务
         </h2>
         <p className="text-sm text-zinc-500">
-          把模糊想法整理成可执行任务，写入今日任务或任务池。
+          先结合愿景、近期任务、复盘、证据和产品拆解判断真实需求，再生成可执行任务。
         </p>
       </div>
 
@@ -77,7 +81,7 @@ export function AiTaskClarifier({
               type="submit"
               disabled={isPending}
             >
-              {isPending ? "整理中..." : "整理任务"}
+              {isPending ? "澄清中..." : "澄清并生成任务"}
             </button>
           </div>
         </div>
@@ -97,7 +101,13 @@ export function AiTaskClarifier({
       ) : null}
 
       {state.status === "success" ? (
-        <ClarifiedPreview task={state.task} rawOutput={state.rawOutput} />
+        <div className="grid gap-3">
+          <NeedClarificationPreview
+            contextStats={state.contextStats}
+            need={state.needClarification}
+          />
+          <ClarifiedPreview task={state.task} rawOutput={state.rawOutput} />
+        </div>
       ) : null}
 
       <AiModelSettings
@@ -107,6 +117,233 @@ export function AiTaskClarifier({
       />
     </section>
   );
+}
+
+type ClarifierContextStats = Extract<
+  AiTaskClarifierState,
+  { status: "success" }
+>["contextStats"];
+
+function NeedClarificationPreview({
+  need,
+  contextStats,
+}: {
+  need: NeedClarification;
+  contextStats?: ClarifierContextStats;
+}) {
+  return (
+    <div className="grid gap-4 border border-emerald-900/70 bg-emerald-950/10 p-3">
+      <div className="grid gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="grid gap-1">
+            <p className="text-sm text-zinc-500">需求澄清</p>
+            <h3 className="text-base font-semibold text-zinc-100">
+              我理解你真正想推进的是
+            </h3>
+          </div>
+          <span className="w-fit border border-emerald-700 bg-black px-2 py-1 font-mono text-xs text-emerald-300">
+            confidence: {confidenceLabel(need.inferredRealNeed.confidence)}
+          </span>
+        </div>
+        <p className="break-words text-sm leading-6 text-zinc-200">
+          {need.inferredRealNeed.statement || "无"}
+        </p>
+        <KeyList label="证据" items={need.inferredRealNeed.evidence} />
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <NeedBlock title="你可能在逃避的是">
+          <div className="grid gap-2 text-sm">
+            <div className="font-semibold text-amber-200">
+              {need.possibleAvoidance.pattern || "无明显模式"}
+            </div>
+            <p className="break-words leading-6 text-zinc-300">
+              {need.possibleAvoidance.warning || "无"}
+            </p>
+            <KeyList label="依据" items={need.possibleAvoidance.evidence} />
+          </div>
+        </NeedBlock>
+
+        <NeedBlock title="和长期愿景的关系">
+          <div className="grid gap-2">
+            <div className="flex flex-wrap gap-2 text-xs">
+              <ScoreBadge
+                label="northStarFit"
+                value={need.alignment.northStarFit}
+              />
+              <ScoreBadge
+                label="currentFocusFit"
+                value={need.alignment.currentFocusFit}
+              />
+            </div>
+            <p className="break-words text-sm leading-6 text-zinc-300">
+              {need.alignment.whyThisMatters || "无"}
+            </p>
+          </div>
+        </NeedBlock>
+      </div>
+
+      <NeedBlock title="本次用到的上下文">
+        <div className="grid gap-3">
+          {contextStats ? (
+            <div className="flex flex-wrap gap-2 text-xs text-zinc-300">
+              <ContextStat label="活跃任务" value={contextStats.activeTaskCount} />
+              <ContextStat
+                label="近期复盘"
+                value={contextStats.recentReviewCount}
+              />
+              <ContextStat
+                label="近期证据"
+                value={contextStats.recentEvidenceCount}
+              />
+              <ContextStat
+                label="产品拆解"
+                value={contextStats.recentProductTeardownCount}
+              />
+              <ContextStat
+                label="漂移模式"
+                value={contextStats.recentDriftPatternCount}
+              />
+            </div>
+          ) : null}
+          <div className="grid gap-3 md:grid-cols-2">
+            <KeyList
+              label="愿景 / 原则"
+              items={need.contextUsed.operatingContext}
+            />
+            <KeyList label="任务" items={need.contextUsed.tasks} />
+            <KeyList label="复盘" items={need.contextUsed.reviews} />
+            <KeyList label="证据" items={need.contextUsed.evidence} />
+            <KeyList
+              label="产品拆解"
+              items={need.contextUsed.productTeardowns}
+            />
+            <KeyList
+              label="漂移模式"
+              items={need.contextUsed.driftPatterns}
+            />
+          </div>
+        </div>
+      </NeedBlock>
+
+      <NeedBlock title="候选任务">
+        <div className="grid gap-2">
+          {need.candidateTasks.length > 0 ? (
+            need.candidateTasks.map((candidate) => (
+              <CandidateTaskPreview
+                candidate={candidate}
+                key={`${candidate.title}-${candidate.nextAction}`}
+              />
+            ))
+          ) : (
+            <p className="text-sm text-zinc-500">无</p>
+          )}
+        </div>
+      </NeedBlock>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <NeedBlock title="仍需确认的问题">
+          <KeyList items={need.missingQuestions} />
+        </NeedBlock>
+        <NeedBlock title="AI 推荐">
+          <p className="break-words text-sm leading-6 text-zinc-300">
+            {need.recommendation || "无"}
+          </p>
+        </NeedBlock>
+      </div>
+    </div>
+  );
+}
+
+function NeedBlock({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="grid gap-2 border border-zinc-800 bg-black/70 p-3">
+      <h4 className="text-sm font-semibold text-zinc-100">{title}</h4>
+      {children}
+    </section>
+  );
+}
+
+function KeyList({ label, items = [] }: { label?: string; items?: string[] }) {
+  return (
+    <div className="grid gap-1 text-sm">
+      {label ? <div className="text-xs text-zinc-500">{label}</div> : null}
+      {items.length > 0 ? (
+        <ul className="grid gap-1 text-zinc-300">
+          {items.map((item) => (
+            <li className="border-l border-zinc-800 pl-2 leading-6" key={item}>
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-zinc-500">无</p>
+      )}
+    </div>
+  );
+}
+
+function ScoreBadge({ label, value }: { label: string; value: number }) {
+  return (
+    <span className="border border-zinc-800 bg-zinc-950 px-2 py-1 font-mono text-zinc-200">
+      {label}: {value}/100
+    </span>
+  );
+}
+
+function ContextStat({ label, value }: { label: string; value: number }) {
+  return (
+    <span className="border border-zinc-800 bg-zinc-950 px-2 py-1">
+      {label} {value}
+    </span>
+  );
+}
+
+function CandidateTaskPreview({
+  candidate,
+}: {
+  candidate: NeedClarification["candidateTasks"][number];
+}) {
+  return (
+    <article className="grid gap-2 border border-zinc-800 bg-zinc-950/70 p-3 text-sm">
+      <div className="flex flex-wrap items-start gap-2">
+        {candidate.recommended ? (
+          <span className="border border-emerald-700 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-300">
+            推荐
+          </span>
+        ) : null}
+        <h5 className="min-w-0 flex-1 break-words font-semibold text-zinc-100">
+          {candidate.title}
+        </h5>
+      </div>
+      <p className="break-words leading-6 text-zinc-400">
+        {candidate.whyThisTask}
+      </p>
+      <div className="grid gap-1 text-zinc-300">
+        <div>下一步：{candidate.nextAction || "无"}</div>
+        <div>完成标准：{candidate.doneWhen || "无"}</div>
+        <div>风险：{candidate.riskFlags.join("，") || "无"}</div>
+      </div>
+    </article>
+  );
+}
+
+function confidenceLabel(value: NeedClarification["inferredRealNeed"]["confidence"]) {
+  if (value === "high") {
+    return "高";
+  }
+
+  if (value === "medium") {
+    return "中";
+  }
+
+  return "低";
 }
 
 function AiModelSettings({
