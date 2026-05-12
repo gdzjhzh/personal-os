@@ -25,6 +25,12 @@ type DeepSeekChatCompletionResponse = {
   };
 };
 
+type LoggableError = {
+  name: string;
+  message: string;
+  cause?: LoggableError;
+};
+
 export type DeepSeekReasoningEffort = "high" | "max";
 
 export type DeepSeekModelInfo = {
@@ -35,6 +41,9 @@ export type DeepSeekModelInfo = {
   apiKeyConfigured: boolean;
   defaultReasoningEffort: DeepSeekReasoningEffort;
 };
+
+const DEEPSEEK_MAX_ATTEMPTS = 3;
+const DEEPSEEK_RETRY_DELAYS_MS = [800, 1600];
 
 export class MissingDeepSeekApiKeyError extends Error {
   constructor() {
@@ -78,57 +87,88 @@ export async function createDeepSeekChatCompletion({
     model,
     reasoningEffort,
     responseFormat: responseFormat || null,
+    maxAttempts: DEEPSEEK_MAX_ATTEMPTS,
     messageCount: messages.length,
     promptChars: messages.reduce((total, message) => total + message.content.length, 0),
   });
 
-  let response: Response;
+  const body = JSON.stringify({
+    model,
+    messages,
+    thinking: { type: "enabled" },
+    reasoning_effort: reasoningEffort,
+    ...(responseFormat
+      ? { response_format: { type: responseFormat } }
+      : {}),
+    stream: false,
+  });
+  let response: Response | null = null;
 
-  try {
-    response = await fetch("https://api.deepseek.com/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+  for (let attempt = 1; attempt <= DEEPSEEK_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      response = await fetch("https://api.deepseek.com/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body,
+      });
+    } catch (error) {
+      const shouldRetry = attempt < DEEPSEEK_MAX_ATTEMPTS;
+
+      console.warn("[ai.deepseek] request:network_error", {
+        requestId,
         model,
-        messages,
-        thinking: { type: "enabled" },
-        reasoning_effort: reasoningEffort,
-        ...(responseFormat
-          ? { response_format: { type: responseFormat } }
-          : {}),
-        stream: false,
-      }),
-    });
-  } catch (error) {
-    console.error("[ai.deepseek] request:network_error", {
-      requestId,
-      model,
-      elapsedMs: Date.now() - startedAt,
-      error: describeError(error),
-    });
-    throw error;
-  }
+        attempt,
+        maxAttempts: DEEPSEEK_MAX_ATTEMPTS,
+        retry: shouldRetry,
+        elapsedMs: Date.now() - startedAt,
+        error: describeError(error),
+      });
 
-  if (!response.ok) {
+      if (!shouldRetry) {
+        throw error;
+      }
+
+      await delay(DEEPSEEK_RETRY_DELAYS_MS[attempt - 1] || 0);
+      continue;
+    }
+
+    if (response.ok) {
+      break;
+    }
+
     const errorText = await response.text();
     const details = readDeepSeekErrorMessage(errorText);
+    const shouldRetry =
+      isRetryableDeepSeekStatus(response.status) &&
+      attempt < DEEPSEEK_MAX_ATTEMPTS;
 
     console.warn("[ai.deepseek] request:http_error", {
       requestId,
       model,
       status: response.status,
+      attempt,
+      maxAttempts: DEEPSEEK_MAX_ATTEMPTS,
+      retry: shouldRetry,
       elapsedMs: Date.now() - startedAt,
       details,
     });
 
-    throw new DeepSeekRequestError(
-      `DeepSeek request failed with ${response.status}`,
-      response.status,
-      details,
-    );
+    if (!shouldRetry) {
+      throw new DeepSeekRequestError(
+        `DeepSeek request failed with ${response.status}`,
+        response.status,
+        details,
+      );
+    }
+
+    await delay(DEEPSEEK_RETRY_DELAYS_MS[attempt - 1] || 0);
+  }
+
+  if (!response?.ok) {
+    throw new DeepSeekRequestError("DeepSeek request did not complete");
   }
 
   const data = (await response.json()) as DeepSeekChatCompletionResponse;
@@ -202,15 +242,30 @@ function readDeepSeekErrorMessage(value: string) {
   }
 }
 
+function isRetryableDeepSeekStatus(status: number) {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+async function delay(ms: number) {
+  if (ms <= 0) {
+    return;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function createDeepSeekRequestId() {
   return `ds_${Date.now().toString(36)}_${crypto.randomUUID().slice(0, 8)}`;
 }
 
-function describeError(error: unknown) {
+function describeError(error: unknown): LoggableError {
   if (error instanceof Error) {
+    const cause = error.cause;
+
     return {
       name: error.name,
       message: error.message,
+      ...(cause ? { cause: describeError(cause) } : {}),
     };
   }
 
