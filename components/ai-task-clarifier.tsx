@@ -114,8 +114,10 @@ export function AiTaskClarifier({
             contextStats={state.contextStats}
             need={state.needClarification}
           />
-          <DecisionTracePreview trace={state.decisionTrace} />
-          <ClarifiedPreview task={state.task} rawOutput={state.rawOutput} />
+          <DecisionTracePreview
+            contextStats={state.contextStats}
+            trace={state.decisionTrace}
+          />
           <ClarificationFeedbackForm
             currentPhaseContext={currentPhaseContext}
             formAction={formAction}
@@ -125,6 +127,7 @@ export function AiTaskClarifier({
             project={project}
             rawTask={rawTask}
           />
+          <ClarifiedPreview task={state.task} rawOutput={state.rawOutput} />
         </div>
       ) : null}
 
@@ -273,7 +276,16 @@ function NeedClarificationPreview({
   );
 }
 
-function DecisionTracePreview({ trace }: { trace: AiDecisionTrace }) {
+function DecisionTracePreview({
+  contextStats,
+  trace,
+}: {
+  contextStats?: ClarifierContextStats;
+  trace: AiDecisionTrace;
+}) {
+  const displayContextStats =
+    contextStats ?? trace.contextSummary.contextStats;
+
   return (
     <div className="grid gap-4 border border-zinc-800 bg-black p-3">
       <div className="grid gap-1">
@@ -298,25 +310,23 @@ function DecisionTracePreview({ trace }: { trace: AiDecisionTrace }) {
           <div className="flex flex-wrap gap-2 text-xs text-zinc-300">
             <ContextStat
               label="活跃任务"
-              value={trace.contextSummary.contextStats.activeTaskCount}
+              value={displayContextStats.activeTaskCount}
             />
             <ContextStat
               label="近期复盘"
-              value={trace.contextSummary.contextStats.recentReviewCount}
+              value={displayContextStats.recentReviewCount}
             />
             <ContextStat
               label="近期证据"
-              value={trace.contextSummary.contextStats.recentEvidenceCount}
+              value={displayContextStats.recentEvidenceCount}
             />
             <ContextStat
               label="产品拆解"
-              value={
-                trace.contextSummary.contextStats.recentProductTeardownCount
-              }
+              value={displayContextStats.recentProductTeardownCount}
             />
             <ContextStat
               label="漂移模式"
-              value={trace.contextSummary.contextStats.recentDriftPatternCount}
+              value={displayContextStats.recentDriftPatternCount}
             />
           </div>
           <div className="grid gap-3 md:grid-cols-2">

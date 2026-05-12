@@ -36,6 +36,11 @@ type ClarifyTaskSuccess = {
   rawOutput: string;
 };
 
+type SafetyRuleResult = {
+  task: ClarifiedTaskDraft;
+  guardrailsApplied: AiGuardrailApplied[];
+};
+
 const priorities: TaskPriority[] = ["P0", "P1", "P2"];
 const statuses: ClarifiedTaskStatus[] = [
   "inbox",
@@ -190,18 +195,34 @@ function parseClarifierResult(
     throwInvalid(rawOutput);
   }
 
-  if (
-    !isRecord(parsed.needClarification) ||
-    !isRecord(parsed.decisionTrace) ||
-    !isRecord(parsed.task)
-  ) {
+  if (!isRecord(parsed.needClarification) || !isRecord(parsed.task)) {
     throwInvalid(rawOutput);
   }
 
+  const needClarification = readNeedClarification(
+    parsed.needClarification,
+    rawOutput,
+  );
+  const parsedTask = parseClarifiedTask(parsed.task, rawOutput, input);
+  const safetyResult = applyDeterministicSafetyRules(
+    parsedTask,
+    input.rawTask,
+  );
+  const decisionTrace = mergeDecisionTraceGuardrails(
+    readDecisionTraceOrFallback(
+      parsed.decisionTrace,
+      rawOutput,
+      needClarification,
+      safetyResult.task,
+      input.contextPack,
+    ),
+    safetyResult.guardrailsApplied,
+  );
+
   return {
-    needClarification: readNeedClarification(parsed.needClarification, rawOutput),
-    decisionTrace: readDecisionTrace(parsed.decisionTrace, rawOutput),
-    task: parseClarifiedTask(parsed.task, rawOutput, input),
+    needClarification,
+    decisionTrace,
+    task: safetyResult.task,
     rawOutput,
   };
 }
@@ -229,7 +250,7 @@ function parseClarifiedTask(
     notes: readString(value.notes, rawOutput),
   };
 
-  return applyDeterministicSafetyRules(task, input.rawTask);
+  return task;
 }
 
 function buildSystemPrompt() {
@@ -546,6 +567,149 @@ function readDecisionTrace(
   };
 }
 
+function readDecisionTraceOrFallback(
+  value: unknown,
+  rawOutput: string,
+  needClarification: NeedClarification,
+  task: ClarifiedTaskDraft,
+  contextPack?: DecisionContextPack,
+) {
+  if (!isRecord(value)) {
+    return buildFallbackDecisionTrace(needClarification, task, contextPack);
+  }
+
+  try {
+    return readDecisionTrace(value, rawOutput);
+  } catch (error) {
+    if (
+      error instanceof TaskClarifierError &&
+      error.code === "invalid_json"
+    ) {
+      return buildFallbackDecisionTrace(needClarification, task, contextPack);
+    }
+
+    throw error;
+  }
+}
+
+function buildFallbackDecisionTrace(
+  needClarification: NeedClarification,
+  task: ClarifiedTaskDraft,
+  contextPack?: DecisionContextPack,
+): AiDecisionTrace {
+  const operatingContext = contextPack?.operatingContext;
+  const candidateComparison = needClarification.candidateTasks.map(
+    (candidate): AiCandidateDecision => ({
+      title: candidate.title,
+      whyConsidered: candidate.whyThisTask,
+      northStarFit: needClarification.alignment.northStarFit,
+      currentFocusFit: needClarification.alignment.currentFocusFit,
+      evidencePotential: candidate.recommended ? 80 : 55,
+      avoidanceRisk: candidate.riskFlags.length > 0 ? 60 : 25,
+      effortLevel: candidate.riskFlags.includes("任务过大") ? "large" : "small",
+      decision: candidate.recommended ? "recommended" : "alternative",
+      reason: candidate.recommended
+        ? "fallback 根据 needClarification 中的 recommended=true 选择。"
+        : "fallback 保留为备选，等待用户进一步修正判断。",
+    }),
+  );
+  const whyNotOthers = candidateComparison
+    .filter((candidate) => candidate.title !== task.title)
+    .map((candidate) => `${candidate.title}: ${candidate.reason}`)
+    .slice(0, 3);
+
+  return {
+    decisionQuestion: "基于当前输入和上下文，今天应该生成什么任务？",
+    contextSummary: {
+      northStar: operatingContext?.northStar || "",
+      currentFocus: operatingContext?.currentFocus || "",
+      antiGoalsUsed: operatingContext?.antiGoals || [],
+      principlesUsed: operatingContext?.principles || [],
+      contextStats: contextPack?.contextStats || {
+        activeTaskCount: 0,
+        recentReviewCount: 0,
+        recentEvidenceCount: 0,
+        recentProductTeardownCount: 0,
+        recentDriftPatternCount: 0,
+      },
+    },
+    signals: [
+      {
+        sourceType: "rawInput",
+        label: "原始输入",
+        quote:
+          contextPack?.rawInput ||
+          needClarification.understoodInput ||
+          task.title,
+        interpretation: needClarification.inferredRealNeed.statement,
+        strength: confidenceToSignalStrength(
+          needClarification.inferredRealNeed.confidence,
+        ),
+      },
+    ],
+    hypotheses: [
+      {
+        statement: needClarification.inferredRealNeed.statement,
+        confidence: needClarification.inferredRealNeed.confidence,
+        supportingSignals: ["原始输入"],
+        uncertainty:
+          "模型未返回合法 decisionTrace，本段为系统 fallback 摘要。",
+      },
+    ],
+    candidateComparison,
+    guardrailsApplied: [],
+    finalDecision: {
+      selectedTitle: task.title,
+      whyThisNow:
+        needClarification.recommendation ||
+        needClarification.alignment.whyThisMatters,
+      whyNotOthers:
+        whyNotOthers.length > 0
+          ? whyNotOthers
+          : ["模型未提供有效 decisionTrace，暂无法可靠比较其他候选任务。"],
+      smallestNextAction: task.nextAction,
+      doneWhen: task.doneWhen,
+    },
+    discussionPrompts: [
+      "这个理解是否准确？如果不准确，请直接说明你真正想推进的目标。",
+      "这个最小动作是否太大或太偏？如果是，请给出你希望收束的方向。",
+    ],
+  };
+}
+
+function confidenceToSignalStrength(
+  confidence: NeedConfidence,
+): AiDecisionSignal["strength"] {
+  if (confidence === "high") {
+    return "strong";
+  }
+
+  if (confidence === "medium") {
+    return "medium";
+  }
+
+  return "weak";
+}
+
+function mergeDecisionTraceGuardrails(
+  trace: AiDecisionTrace,
+  guardrailsApplied: AiGuardrailApplied[],
+): AiDecisionTrace {
+  const merged = new Map<string, AiGuardrailApplied>();
+
+  for (const guardrail of [
+    ...trace.guardrailsApplied,
+    ...guardrailsApplied,
+  ]) {
+    merged.set(`${guardrail.rule}-${guardrail.effect}`, guardrail);
+  }
+
+  return {
+    ...trace,
+    guardrailsApplied: [...merged.values()],
+  };
+}
+
 function readDecisionSignals(
   value: unknown,
   rawOutput: string,
@@ -665,7 +829,7 @@ function readContextStats(
 function applyDeterministicSafetyRules(
   task: ClarifiedTaskDraft,
   rawTask: string,
-) {
+): SafetyRuleResult {
   const mergedText = [
     rawTask,
     task.title,
@@ -675,22 +839,44 @@ function applyDeterministicSafetyRules(
   ].join(" ");
   const riskFlags = new Set(task.riskFlags);
   const doNot = new Set(task.doNot);
+  const guardrailsApplied: AiGuardrailApplied[] = [];
 
   if (/学习|研究|了解|看看|阅读|课程/.test(mergedText)) {
     riskFlags.add("泛学习");
+    guardrailsApplied.push({
+      rule: "泛学习风险",
+      triggeredBy: "命中了 学习/研究/了解/看看/阅读/课程",
+      effect: "riskFlags 追加 泛学习",
+    });
   }
 
   if (/网站|产品|竞品|网页|浏览|刷|搜索|Google|YouTube|Twitter|X\b/i.test(mergedText)) {
     riskFlags.add("信息刷屏");
     doNot.add("不要无限浏览");
+    guardrailsApplied.push({
+      rule: "信息刷屏风险",
+      triggeredBy:
+        "命中了 网站/产品/竞品/网页/浏览/刷/搜索/Google/YouTube/Twitter/X",
+      effect: "riskFlags 追加 信息刷屏；doNot 追加 不要无限浏览",
+    });
   }
 
   if (/完整|全部|系统|平台|重构|做完|从零|上线|发布/.test(mergedText)) {
     riskFlags.add("任务过大");
+    guardrailsApplied.push({
+      rule: "任务过大风险",
+      triggeredBy: "命中了 完整/全部/系统/平台/重构/做完/从零/上线/发布",
+      effect: "riskFlags 追加 任务过大",
+    });
   }
 
   if (/优化系统|重构系统|整理系统|配置|框架|架构|自动化|仪表盘/.test(mergedText)) {
     riskFlags.add("系统打磨风险");
+    guardrailsApplied.push({
+      rule: "系统打磨风险",
+      triggeredBy: "命中了 优化系统/重构系统/整理系统/配置/框架/架构/自动化/仪表盘",
+      effect: "riskFlags 追加 系统打磨风险",
+    });
   }
 
   for (const item of forbiddenSuggestions) {
@@ -698,10 +884,21 @@ function applyDeterministicSafetyRules(
   }
 
   return {
-    ...task,
-    project: task.project || "Personal SaaS OS",
-    riskFlags: [...riskFlags],
-    doNot: [...doNot],
+    task: {
+      ...task,
+      project: task.project || "Personal SaaS OS",
+      riskFlags: [...riskFlags],
+      doNot: [...doNot],
+    },
+    guardrailsApplied: [
+      ...guardrailsApplied,
+      {
+        rule: "V0 禁止项",
+        triggeredBy: "系统固定 forbiddenSuggestions 列表",
+        effect:
+          "doNot 确保包含 不要做 RAG/vector search/database/Docker/crawler/auth/dashboard/向量搜索/数据库/爬虫/认证/仪表盘",
+      },
+    ],
   };
 }
 
