@@ -2,16 +2,13 @@ import {
   createDeepSeekRequestId,
   DeepSeekAbortError,
   DeepSeekRequestError,
-  DeepSeekTimeoutError,
   MissingDeepSeekApiKeyError,
   streamDeepSeekChatCompletion,
 } from "@/lib/server/ai/deepseek";
 import { buildDecisionContextPack } from "@/lib/server/ai/decisionContext";
 import {
-  buildFallbackVerdict,
   buildForceTaskMessages,
   buildTaskGateMessages,
-  isAmbiguousShortInput,
   parseTaskGateVerdict,
   TaskGatekeeperError,
   type TaskGatePromptInput,
@@ -140,7 +137,6 @@ export async function POST(request: Request) {
           responseFormat: "json_object",
           maxTokens: promptInput.force ? 1800 : 2200,
           signal: deepSeekAbort.signal,
-          deadlineMs: 25000,
         })) {
           if (chunk.type === "reasoning") {
             reasoningChars += chunk.text.length;
@@ -194,28 +190,6 @@ export async function POST(request: Request) {
           reasoningChars,
         });
       } catch (error) {
-        if (
-          error instanceof DeepSeekTimeoutError &&
-          promptInput &&
-          (promptInput.force || isAmbiguousShortInput(rawTask))
-        ) {
-          const fallback = buildFallbackVerdict(promptInput);
-
-          send("status", {
-            type: "status",
-            message:
-              promptInput.force
-                ? "AI 已等待 25 秒，先按强制生成规则给出最小风险草稿。"
-                : "AI 已等待 25 秒，先按保守准入规则确认一个阻塞问题。",
-          });
-          send("result", {
-            type: "result",
-            verdict: fallback,
-          });
-          send("done", { type: "done", ok: true });
-          return;
-        }
-
         const event = toTaskGateErrorEvent(error);
 
         if (!(error instanceof DeepSeekAbortError)) {
@@ -318,15 +292,6 @@ function toTaskGateErrorEvent(
       code: "missing_api_key",
       message:
         "未配置 DEEPSEEK_API_KEY，无法使用 AI 任务准入。你仍然可以手动新增任务。",
-    };
-  }
-
-  if (error instanceof DeepSeekTimeoutError) {
-    return {
-      type: "error",
-      code: "timeout",
-      message:
-        "AI 已等待 25 秒，这次判断可能过重。输入已保留，你可以继续补充一句、稍后重试，或手动新增任务。",
     };
   }
 

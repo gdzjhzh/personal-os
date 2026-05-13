@@ -63,7 +63,6 @@ export type DeepSeekModelInfo = {
 const DEEPSEEK_MAX_ATTEMPTS = 2;
 const DEEPSEEK_ATTEMPT_TIMEOUT_MS = 12000;
 const DEEPSEEK_RETRY_DELAYS_MS = [800];
-const DEEPSEEK_STREAM_DEFAULT_DEADLINE_MS = 25000;
 
 export class MissingDeepSeekApiKeyError extends Error {
   constructor() {
@@ -260,7 +259,7 @@ export async function* streamDeepSeekChatCompletion({
   responseFormat,
   maxTokens,
   signal,
-  deadlineMs = DEEPSEEK_STREAM_DEFAULT_DEADLINE_MS,
+  deadlineMs,
 }: DeepSeekChatCompletionOptions): AsyncGenerator<DeepSeekStreamChunk> {
   const startedAt = Date.now();
   const apiKey = readDeepSeekApiKey();
@@ -291,10 +290,13 @@ export async function* streamDeepSeekChatCompletion({
   let reasoningChars = 0;
   let usage: unknown = null;
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
-  const deadline = setTimeout(() => {
-    deadlineExpired = true;
-    controller.abort();
-  }, deadlineMs);
+  const deadline =
+    typeof deadlineMs === "number" && deadlineMs > 0
+      ? setTimeout(() => {
+          deadlineExpired = true;
+          controller.abort();
+        }, deadlineMs)
+      : undefined;
   const removeExternalAbort = linkExternalSignal(signal, controller, () => {
     externalAborted = true;
   });
@@ -305,7 +307,7 @@ export async function* streamDeepSeekChatCompletion({
     reasoningEffort,
     responseFormat: responseFormat || null,
     maxTokens: maxTokens || null,
-    deadlineMs,
+    deadlineMs: deadlineMs || null,
     messageCount: messages.length,
     promptChars,
   });
@@ -376,12 +378,12 @@ export async function* streamDeepSeekChatCompletion({
       console.warn("[ai.deepseek] stream:timeout", {
         requestId,
         model,
-        deadlineMs,
+        deadlineMs: deadlineMs || null,
         elapsedMs: Date.now() - startedAt,
         contentChars,
         reasoningChars,
       });
-      throw new DeepSeekTimeoutError(deadlineMs);
+      throw new DeepSeekTimeoutError(deadlineMs || 0);
     }
 
     if (externalAborted || signal?.aborted) {
@@ -411,7 +413,9 @@ export async function* streamDeepSeekChatCompletion({
       formatNetworkErrorDetails(error),
     );
   } finally {
-    clearTimeout(deadline);
+    if (deadline) {
+      clearTimeout(deadline);
+    }
     removeExternalAbort();
 
     if (!completed && !controller.signal.aborted) {
