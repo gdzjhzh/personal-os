@@ -165,7 +165,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
                 Personal SaaS OS
               </p>
               <h1 className="mt-1 text-2xl font-semibold text-zinc-50 sm:text-3xl">
-                {view === "tasks" ? "今日任务" : view === "review" ? "今日复盘" : "AI 任务梳理"}
+                {view === "tasks" ? "今日任务" : view === "review" ? "今日复盘" : "AI 任务准入"}
               </h1>
             </div>
             <div className="text-sm leading-6 text-zinc-500 md:text-right">
@@ -386,7 +386,7 @@ function TodaySidebar({ activeView }: { activeView: TodayView }) {
   const items: Array<{ view: TodayView; label: string; href: string }> = [
     { view: "tasks", label: "今日任务", href: "/today?view=tasks" },
     { view: "review", label: "今日复盘", href: "/today?view=review" },
-    { view: "new-task", label: "AI 任务梳理", href: "/today?view=new-task" },
+    { view: "new-task", label: "AI 任务准入", href: "/today?view=new-task" },
   ];
 
   return (

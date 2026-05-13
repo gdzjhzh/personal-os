@@ -417,6 +417,77 @@ export type ClarifiedTaskDraft = {
   notes: string;
 };
 
+export type TaskGateVerdictKind = "reject" | "ask" | "recommend";
+
+export type TaskGateEvidence = {
+  sourceType:
+    | "rawInput"
+    | "operatingContext"
+    | "task"
+    | "review"
+    | "evidence"
+    | "productTeardown"
+    | "driftPattern";
+  label: string;
+  quote: string;
+  interpretation: string;
+};
+
+export type TaskGateOption = {
+  label: string;
+  value: string;
+  intent:
+    | "answer"
+    | "revise_smaller"
+    | "continue"
+    | "dismiss"
+    | "force";
+};
+
+export type TaskGateContextSnapshot = {
+  northStar: string;
+  currentFocus: string;
+  activeTaskCount: number;
+  recentReviewCount: number;
+  recentEvidenceCount: number;
+  recentProductTeardownCount: number;
+  recentDriftPatternCount: number;
+  driftPatterns: string[];
+};
+
+export type TaskGateVerdict = {
+  verdict: TaskGateVerdictKind;
+  summary: string;
+  reason: string;
+  evidence: TaskGateEvidence[];
+  blockingQuestion?: string;
+  options: TaskGateOption[];
+  contextSnapshot: TaskGateContextSnapshot;
+  taskDraft: ClarifiedTaskDraft | null;
+  forceDraftSuggestion?: {
+    title: string;
+    nextAction: string;
+    doneWhen: string;
+    riskFlags: string[];
+    doNot: string[];
+    notes: string;
+  } | null;
+};
+
+export type TaskGateDialogMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type TaskGateStreamEvent =
+  | { type: "status"; message: string }
+  | { type: "heartbeat"; message: string; elapsedMs: number }
+  | { type: "thinking"; message: string; reasoningChars: number }
+  | { type: "drafting"; message: string; receivedChars: number }
+  | { type: "result"; verdict: TaskGateVerdict }
+  | { type: "error"; message: string; code?: string }
+  | { type: "done"; ok: boolean };
+
 export type AiTaskClarifierState =
   | {
       status: "idle";

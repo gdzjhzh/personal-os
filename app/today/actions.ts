@@ -86,7 +86,7 @@ export async function clarifyTaskAction(
       () =>
         new TaskClarifierError(
           "request_failed",
-          "AI 请求超时：DeepSeek 连接长时间没有返回。请稍后重试，或把整理等级调成 high。",
+          "这次判断偏重，建议先用更小的问题和 AI 讨论，或直接手动新增一个最小任务。",
         ),
     );
 
@@ -267,6 +267,63 @@ export async function saveClarifiedTaskAction(formData: FormData) {
 
   revalidatePath("/today");
   redirect("/today?view=tasks&created=ai-task");
+}
+
+export async function saveGateTaskAction(formData: FormData) {
+  const taskJson = String(formData.get("taskJson") || "");
+  const parsedTask = parseClarifiedTaskDraft(taskJson);
+
+  if (!parsedTask) {
+    redirect("/today?view=new-task&created=ai-error");
+  }
+
+  const isForceMode = formData.get("forceMode") === "true";
+  const planForToday = formData.get("planForToday") === "true";
+  const task = isForceMode
+    ? enforceForcedGateTask(parsedTask)
+    : parsedTask;
+
+  await createTask({
+    title: task.title,
+    project: task.project,
+    priority: task.priority,
+    status: task.status,
+    codexFit: task.codexFit,
+    owner: task.owner,
+    nextAction: task.nextAction,
+    doneWhen: task.doneWhen,
+    riskFlags: task.riskFlags,
+    doNot: task.doNot,
+    notes: task.notes,
+    plannedFor: planForToday ? getTodayDate() : undefined,
+    quadrant: planForToday
+      ? inferQuadrantFromPriorityAndRiskFlags(task.priority, task.riskFlags)
+      : undefined,
+  });
+
+  revalidatePath("/today");
+  redirect("/today?view=tasks&created=ai-task");
+}
+
+function enforceForcedGateTask(task: ClarifiedTaskDraft): ClarifiedTaskDraft {
+  const riskFlags = [
+    ...new Set([
+      ...task.riskFlags.map((flag) => flag.trim()).filter(Boolean),
+      task.riskFlags.length > 0 ? "" : "信息不足仍强制执行",
+    ]),
+  ].filter(Boolean);
+  const notes = /用户强制生成|强制执行/.test(task.notes)
+    ? task.notes
+    : `用户强制生成，不代表系统推荐。${task.notes ? ` ${task.notes}` : ""}`;
+
+  return {
+    ...task,
+    priority: "P2",
+    status: "inbox",
+    riskFlags:
+      riskFlags.length > 0 ? riskFlags : ["信息不足仍强制执行"],
+    notes,
+  };
 }
 
 function parseClarifiedTaskDraft(value: string): ClarifiedTaskDraft | null {

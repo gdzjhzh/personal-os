@@ -1,4 +1,4 @@
-type DeepSeekMessage = {
+export type DeepSeekMessage = {
   role: "system" | "user" | "assistant";
   content: string;
 };
@@ -8,6 +8,9 @@ type DeepSeekChatCompletionOptions = {
   reasoningEffort?: DeepSeekReasoningEffort;
   requestId?: string;
   responseFormat?: "json_object";
+  maxTokens?: number;
+  signal?: AbortSignal;
+  deadlineMs?: number;
 };
 
 type DeepSeekChatCompletionResponse = {
@@ -23,6 +26,21 @@ type DeepSeekChatCompletionResponse = {
     prompt_tokens?: number;
     total_tokens?: number;
   };
+};
+
+export type DeepSeekStreamChunk =
+  | { type: "reasoning"; text: string }
+  | { type: "content"; text: string }
+  | { type: "usage"; usage: unknown };
+
+type DeepSeekStreamPayload = {
+  choices?: Array<{
+    delta?: {
+      reasoning_content?: string;
+      content?: string;
+    };
+  }>;
+  usage?: unknown;
 };
 
 type LoggableError = {
@@ -45,6 +63,7 @@ export type DeepSeekModelInfo = {
 const DEEPSEEK_MAX_ATTEMPTS = 2;
 const DEEPSEEK_ATTEMPT_TIMEOUT_MS = 12000;
 const DEEPSEEK_RETRY_DELAYS_MS = [800];
+const DEEPSEEK_STREAM_DEFAULT_DEADLINE_MS = 25000;
 
 export class MissingDeepSeekApiKeyError extends Error {
   constructor() {
@@ -65,32 +84,47 @@ export class DeepSeekRequestError extends Error {
   }
 }
 
+export class DeepSeekTimeoutError extends DeepSeekRequestError {
+  constructor(deadlineMs: number) {
+    super("DeepSeek request timed out", undefined, `deadlineMs=${deadlineMs}`);
+    this.name = "DeepSeekTimeoutError";
+  }
+}
+
+export class DeepSeekAbortError extends DeepSeekRequestError {
+  constructor() {
+    super("DeepSeek request aborted");
+    this.name = "DeepSeekAbortError";
+  }
+}
+
 export async function createDeepSeekChatCompletion({
   messages,
   reasoningEffort = readReasoningEffortFromEnv(),
   requestId = createDeepSeekRequestId(),
   responseFormat,
+  maxTokens,
+  signal,
 }: DeepSeekChatCompletionOptions) {
   const startedAt = Date.now();
-  const apiKey =
-    process.env.DEEPSEEK_API_KEY?.trim() || process.env.PSOS_AI_API_KEY?.trim();
+  const apiKey = readDeepSeekApiKey();
 
   if (!apiKey) {
     console.warn("[ai.deepseek] request:missing_key", { requestId });
     throw new MissingDeepSeekApiKeyError();
   }
 
-  const model = normalizeDeepSeekModel(
-    process.env.DEEPSEEK_MODEL?.trim() || "deepseek-v4-pro",
-  );
+  const model = currentDeepSeekModel();
+  const promptChars = countPromptChars(messages);
   console.info("[ai.deepseek] request:start", {
     requestId,
     model,
     reasoningEffort,
     responseFormat: responseFormat || null,
+    maxTokens: maxTokens || null,
     maxAttempts: DEEPSEEK_MAX_ATTEMPTS,
     messageCount: messages.length,
-    promptChars: messages.reduce((total, message) => total + message.content.length, 0),
+    promptChars,
   });
 
   const body = JSON.stringify({
@@ -101,6 +135,7 @@ export async function createDeepSeekChatCompletion({
     ...(responseFormat
       ? { response_format: { type: responseFormat } }
       : {}),
+    ...(maxTokens ? { max_tokens: maxTokens } : {}),
     stream: false,
   });
   let response: Response | null = null;
@@ -111,6 +146,7 @@ export async function createDeepSeekChatCompletion({
       () => controller.abort(),
       DEEPSEEK_ATTEMPT_TIMEOUT_MS,
     );
+    const removeExternalAbort = linkExternalSignal(signal, controller);
 
     try {
       response = await fetch("https://api.deepseek.com/chat/completions", {
@@ -123,6 +159,10 @@ export async function createDeepSeekChatCompletion({
         signal: controller.signal,
       });
     } catch (error) {
+      if (signal?.aborted) {
+        throw new DeepSeekAbortError();
+      }
+
       const shouldRetry = attempt < DEEPSEEK_MAX_ATTEMPTS;
       const details = formatNetworkErrorDetails(error);
 
@@ -149,6 +189,7 @@ export async function createDeepSeekChatCompletion({
       continue;
     } finally {
       clearTimeout(timeout);
+      removeExternalAbort();
     }
 
     if (response.ok) {
@@ -212,17 +253,204 @@ export async function createDeepSeekChatCompletion({
   return content;
 }
 
+export async function* streamDeepSeekChatCompletion({
+  messages,
+  reasoningEffort = readReasoningEffortFromEnv(),
+  requestId = createDeepSeekRequestId(),
+  responseFormat,
+  maxTokens,
+  signal,
+  deadlineMs = DEEPSEEK_STREAM_DEFAULT_DEADLINE_MS,
+}: DeepSeekChatCompletionOptions): AsyncGenerator<DeepSeekStreamChunk> {
+  const startedAt = Date.now();
+  const apiKey = readDeepSeekApiKey();
+
+  if (!apiKey) {
+    console.warn("[ai.deepseek] stream:missing_key", { requestId });
+    throw new MissingDeepSeekApiKeyError();
+  }
+
+  const model = currentDeepSeekModel();
+  const promptChars = countPromptChars(messages);
+  const body = JSON.stringify({
+    model,
+    messages,
+    thinking: { type: "enabled" },
+    reasoning_effort: reasoningEffort,
+    ...(responseFormat
+      ? { response_format: { type: responseFormat } }
+      : {}),
+    ...(maxTokens ? { max_tokens: maxTokens } : {}),
+    stream: true,
+  });
+  const controller = new AbortController();
+  let deadlineExpired = false;
+  let externalAborted = false;
+  let completed = false;
+  let contentChars = 0;
+  let reasoningChars = 0;
+  let usage: unknown = null;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  const deadline = setTimeout(() => {
+    deadlineExpired = true;
+    controller.abort();
+  }, deadlineMs);
+  const removeExternalAbort = linkExternalSignal(signal, controller, () => {
+    externalAborted = true;
+  });
+
+  console.info("[ai.deepseek] stream:start", {
+    requestId,
+    model,
+    reasoningEffort,
+    responseFormat: responseFormat || null,
+    maxTokens: maxTokens || null,
+    deadlineMs,
+    messageCount: messages.length,
+    promptChars,
+  });
+
+  try {
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      const details = readDeepSeekErrorMessage(errorText);
+
+      console.warn("[ai.deepseek] stream:http_error", {
+        requestId,
+        model,
+        status: response.status,
+        elapsedMs: Date.now() - startedAt,
+        details,
+      });
+      throw new DeepSeekRequestError(
+        `DeepSeek request failed with ${response.status}`,
+        response.status,
+        details,
+      );
+    }
+
+    if (!response.body) {
+      throw new DeepSeekRequestError("DeepSeek returned no response body");
+    }
+
+    reader = response.body.getReader();
+
+    for await (const payload of readSsePayloads(reader, controller.signal)) {
+      if (payload === "[DONE]") {
+        completed = true;
+        break;
+      }
+
+      const parsed = parseStreamPayload(payload);
+      const delta = parsed.choices?.[0]?.delta;
+      const reasoningText = delta?.reasoning_content;
+      const contentText = delta?.content;
+
+      if (typeof reasoningText === "string" && reasoningText.length > 0) {
+        reasoningChars += reasoningText.length;
+        yield { type: "reasoning", text: reasoningText };
+      }
+
+      if (typeof contentText === "string" && contentText.length > 0) {
+        contentChars += contentText.length;
+        yield { type: "content", text: contentText };
+      }
+
+      if (parsed.usage) {
+        usage = parsed.usage;
+        yield { type: "usage", usage: parsed.usage };
+      }
+    }
+  } catch (error) {
+    if (deadlineExpired) {
+      console.warn("[ai.deepseek] stream:timeout", {
+        requestId,
+        model,
+        deadlineMs,
+        elapsedMs: Date.now() - startedAt,
+        contentChars,
+        reasoningChars,
+      });
+      throw new DeepSeekTimeoutError(deadlineMs);
+    }
+
+    if (externalAborted || signal?.aborted) {
+      console.info("[ai.deepseek] stream:aborted", {
+        requestId,
+        model,
+        elapsedMs: Date.now() - startedAt,
+        contentChars,
+        reasoningChars,
+      });
+      throw new DeepSeekAbortError();
+    }
+
+    if (error instanceof DeepSeekRequestError) {
+      throw error;
+    }
+
+    console.warn("[ai.deepseek] stream:network_error", {
+      requestId,
+      model,
+      elapsedMs: Date.now() - startedAt,
+      error: describeError(error),
+    });
+    throw new DeepSeekRequestError(
+      "DeepSeek stream request failed",
+      undefined,
+      formatNetworkErrorDetails(error),
+    );
+  } finally {
+    clearTimeout(deadline);
+    removeExternalAbort();
+
+    if (!completed && !controller.signal.aborted) {
+      controller.abort();
+    }
+
+    try {
+      reader?.releaseLock();
+    } catch {
+      // The reader may already be released after abort. Nothing else to clean up.
+    }
+
+    console.info("[ai.deepseek] stream:finish", {
+      requestId,
+      model,
+      reasoningEffort,
+      promptChars,
+      elapsedMs: Date.now() - startedAt,
+      contentChars,
+      reasoningChars,
+      completed,
+      usage,
+    });
+  }
+}
+
 export function getDeepSeekModelInfo(): DeepSeekModelInfo {
   return {
     provider: "DeepSeek",
     model: currentDeepSeekModel(),
     endpointHost: "api.deepseek.com",
     thinkingEnabled: true,
-    apiKeyConfigured: Boolean(
-      process.env.DEEPSEEK_API_KEY?.trim() || process.env.PSOS_AI_API_KEY?.trim(),
-    ),
+    apiKeyConfigured: Boolean(readDeepSeekApiKey()),
     defaultReasoningEffort: readReasoningEffortFromEnv(),
   };
+}
+
+export function createDeepSeekRequestId() {
+  return `ds_${Date.now().toString(36)}_${crypto.randomUUID().slice(0, 8)}`;
 }
 
 function normalizeDeepSeekModel(baseModel: string) {
@@ -235,8 +463,109 @@ function currentDeepSeekModel() {
   );
 }
 
+function readDeepSeekApiKey() {
+  return (
+    process.env.DEEPSEEK_API_KEY?.trim() || process.env.PSOS_AI_API_KEY?.trim()
+  );
+}
+
 function readReasoningEffortFromEnv(): DeepSeekReasoningEffort {
   return process.env.DEEPSEEK_REASONING_EFFORT === "max" ? "max" : "high";
+}
+
+function countPromptChars(messages: DeepSeekMessage[]) {
+  return messages.reduce(
+    (total, message) => total + message.content.length,
+    0,
+  );
+}
+
+async function* readSsePayloads(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal,
+) {
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    if (signal.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const frames = splitSseFrames(buffer);
+    buffer = frames.remainder;
+
+    for (const frame of frames.complete) {
+      const data = readSseData(frame);
+
+      if (!data) {
+        continue;
+      }
+
+      yield data;
+    }
+  }
+
+  buffer += decoder.decode();
+
+  if (buffer.trim()) {
+    const data = readSseData(buffer);
+
+    if (data) {
+      yield data;
+    }
+  }
+}
+
+function splitSseFrames(buffer: string) {
+  const normalized = buffer.replace(/\r\n/g, "\n");
+  const complete: string[] = [];
+  let searchFrom = 0;
+  let separatorIndex = normalized.indexOf("\n\n", searchFrom);
+
+  while (separatorIndex !== -1) {
+    complete.push(normalized.slice(searchFrom, separatorIndex));
+    searchFrom = separatorIndex + 2;
+    separatorIndex = normalized.indexOf("\n\n", searchFrom);
+  }
+
+  return {
+    complete,
+    remainder: normalized.slice(searchFrom),
+  };
+}
+
+function readSseData(frame: string) {
+  const dataLines = frame
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trimStart());
+
+  if (dataLines.length === 0) {
+    return "";
+  }
+
+  return dataLines.join("\n").trim();
+}
+
+function parseStreamPayload(payload: string): DeepSeekStreamPayload {
+  try {
+    return JSON.parse(payload) as DeepSeekStreamPayload;
+  } catch (error) {
+    throw new DeepSeekRequestError(
+      "DeepSeek stream returned invalid JSON chunk",
+      undefined,
+      describeError(error).message,
+    );
+  }
 }
 
 function readDeepSeekErrorMessage(value: string) {
@@ -279,8 +608,28 @@ async function delay(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function createDeepSeekRequestId() {
-  return `ds_${Date.now().toString(36)}_${crypto.randomUUID().slice(0, 8)}`;
+function linkExternalSignal(
+  signal: AbortSignal | undefined,
+  controller: AbortController,
+  onAbort?: () => void,
+) {
+  if (!signal) {
+    return () => undefined;
+  }
+
+  if (signal.aborted) {
+    onAbort?.();
+    controller.abort();
+    return () => undefined;
+  }
+
+  const abort = () => {
+    onAbort?.();
+    controller.abort();
+  };
+
+  signal.addEventListener("abort", abort, { once: true });
+  return () => signal.removeEventListener("abort", abort);
 }
 
 function describeError(error: unknown): LoggableError {
