@@ -11,6 +11,8 @@ type DeepSeekChatCompletionOptions = {
   maxTokens?: number;
   signal?: AbortSignal;
   deadlineMs?: number;
+  deadlineMode?: "overall" | "until_first_content";
+  idleTimeoutMs?: number;
 };
 
 type DeepSeekChatCompletionResponse = {
@@ -264,6 +266,8 @@ export async function* streamDeepSeekChatCompletion({
   maxTokens,
   signal,
   deadlineMs,
+  deadlineMode = "overall",
+  idleTimeoutMs,
 }: DeepSeekChatCompletionOptions): AsyncGenerator<DeepSeekStreamChunk> {
   const startedAt = Date.now();
   const apiKey = readDeepSeekApiKey();
@@ -292,19 +296,42 @@ export async function* streamDeepSeekChatCompletion({
   });
   const controller = new AbortController();
   let deadlineExpired = false;
+  let idleTimeoutExpired = false;
   let externalAborted = false;
   let completed = false;
   let contentChars = 0;
   let reasoningChars = 0;
   let usage: unknown = null;
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
-  const deadline =
+  let deadline: ReturnType<typeof setTimeout> | undefined =
     typeof deadlineMs === "number" && deadlineMs > 0
       ? setTimeout(() => {
           deadlineExpired = true;
           controller.abort();
         }, deadlineMs)
       : undefined;
+  let idleDeadline: ReturnType<typeof setTimeout> | undefined;
+  const clearDeadline = () => {
+    if (!deadline) {
+      return;
+    }
+    clearTimeout(deadline);
+    deadline = undefined;
+  };
+  const refreshIdleDeadline = () => {
+    if (typeof idleTimeoutMs !== "number" || idleTimeoutMs <= 0) {
+      return;
+    }
+
+    if (idleDeadline) {
+      clearTimeout(idleDeadline);
+    }
+
+    idleDeadline = setTimeout(() => {
+      idleTimeoutExpired = true;
+      controller.abort();
+    }, idleTimeoutMs);
+  };
   const removeExternalAbort = linkExternalSignal(signal, controller, () => {
     externalAborted = true;
   });
@@ -316,6 +343,8 @@ export async function* streamDeepSeekChatCompletion({
     responseFormat: responseFormat || null,
     maxTokens: maxTokens || null,
     deadlineMs: deadlineMs || null,
+    deadlineMode,
+    idleTimeoutMs: idleTimeoutMs || null,
     messageCount: messages.length,
     promptChars,
   });
@@ -372,7 +401,14 @@ export async function* streamDeepSeekChatCompletion({
       }
 
       if (typeof contentText === "string" && contentText.length > 0) {
+        const hadContent = contentChars > 0;
         contentChars += contentText.length;
+        if (deadlineMode === "until_first_content" && !hadContent) {
+          clearDeadline();
+        }
+        if (deadlineMode === "until_first_content") {
+          refreshIdleDeadline();
+        }
         yield { type: "content", text: contentText };
       }
 
@@ -382,16 +418,21 @@ export async function* streamDeepSeekChatCompletion({
       }
     }
   } catch (error) {
-    if (deadlineExpired) {
+    if (deadlineExpired || idleTimeoutExpired) {
       console.warn("[ai.deepseek] stream:timeout", {
         requestId,
         model,
         deadlineMs: deadlineMs || null,
+        deadlineMode,
+        idleTimeoutMs: idleTimeoutMs || null,
+        timeoutKind: idleTimeoutExpired ? "idle" : "deadline",
         elapsedMs: Date.now() - startedAt,
         contentChars,
         reasoningChars,
       });
-      throw new DeepSeekTimeoutError(deadlineMs || 0);
+      throw new DeepSeekTimeoutError(
+        idleTimeoutExpired ? idleTimeoutMs || 0 : deadlineMs || 0,
+      );
     }
 
     if (externalAborted || signal?.aborted) {
@@ -421,8 +462,9 @@ export async function* streamDeepSeekChatCompletion({
       formatNetworkErrorDetails(error),
     );
   } finally {
-    if (deadline) {
-      clearTimeout(deadline);
+    clearDeadline();
+    if (idleDeadline) {
+      clearTimeout(idleDeadline);
     }
     removeExternalAbort();
 

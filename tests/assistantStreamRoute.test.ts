@@ -79,6 +79,13 @@ describe("assistant stream route", () => {
     expect(result?.text).toContain(partial);
     expect(result?.text).not.toContain("本地兜底");
     expect(result?.fallbackUsed).toBe(false);
+    expect(mocks.streamImpl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deadlineMs: 16000,
+        deadlineMode: "until_first_content",
+        idleTimeoutMs: 60000,
+      }),
+    );
     expect(events.at(-1)).toEqual({ type: "done", ok: true });
   });
 });

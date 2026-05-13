@@ -126,6 +126,8 @@ export async function POST(request: Request) {
           requestId,
           maxTokens: config.maxTokens,
           deadlineMs: config.deadlineMs,
+          deadlineMode: "until_first_content",
+          idleTimeoutMs: config.idleTimeoutMs,
           signal: deepSeekAbort.signal,
         })) {
           if (chunk.type !== "content") {
@@ -254,14 +256,14 @@ function toCoachMode(intent: AssistantIntent): PersonalCoachMode {
 
 function modeConfig(intent: PersonalCoachMode) {
   if (intent === "quick_answer") {
-    return { maxTokens: 800, deadlineMs: 8000 };
+    return { maxTokens: 800, deadlineMs: 8000, idleTimeoutMs: 30000 };
   }
 
   if (intent === "daily_review" || intent === "task_breakdown") {
-    return { maxTokens: 1600, deadlineMs: 16000 };
+    return { maxTokens: 1600, deadlineMs: 16000, idleTimeoutMs: 60000 };
   }
 
-  return { maxTokens: 1400, deadlineMs: 16000 };
+  return { maxTokens: 1400, deadlineMs: 16000, idleTimeoutMs: 60000 };
 }
 
 function statusMessage(intent: PersonalCoachMode) {
