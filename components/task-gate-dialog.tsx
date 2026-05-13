@@ -62,7 +62,6 @@ export function TaskGateDialog({
   onClose: () => void;
 }) {
   const initialSessionRef = useRef(initialSession);
-  const didInitialRunRef = useRef(false);
   const [statusLine, setStatusLine] = useState(
     initialSession?.result
       ? "已恢复上次判断结果。"
@@ -195,12 +194,6 @@ export function TaskGateDialog({
   }, []);
 
   useEffect(() => {
-    if (didInitialRunRef.current) {
-      return;
-    }
-
-    didInitialRunRef.current = true;
-
     const restoredSession = initialSessionRef.current;
 
     if (restoredSession?.result) {
