@@ -1,6 +1,6 @@
 # Personal SaaS OS
 
-Local-first V0 for daily P0 selection, active task tracking, Codex task packet generation, evening review, and Obsidian Markdown export.
+Local-first V0 for daily P0 selection, Personal OS Coach guidance, active task tracking, Codex task packet generation, evening review, and Obsidian Markdown export.
 
 ## Run
 
@@ -46,4 +46,4 @@ DEEPSEEK_REASONING_EFFORT=high
 
 If `OBSIDIAN_VAULT_PATH` is unset, Markdown export writes to `exports/YYYY-MM-DD.md`.
 
-`DEEPSEEK_API_KEY` is only needed for the 任务梳理 section. `PSOS_AI_API_KEY` is supported as a local alias. The UI lets you choose `high` or `max` reasoning effort. DeepSeek V4 models provide 1M context with the base model name, so this app keeps `DEEPSEEK_MODEL=deepseek-v4-pro` for the OpenAI-compatible Chat Completions API. Without a valid key, the app still runs and shows a Chinese configuration error when AI task organization is used.
+`DEEPSEEK_API_KEY` is used by Personal OS Coach, AI task gate, and AI review flows. `PSOS_AI_API_KEY` is supported as a local alias. The task gate still uses the heavier reasoning path because it must return structured verdict JSON; the coach stream uses natural language and falls back to local rule-based Chinese guidance when the key is missing or the model times out. DeepSeek V4 models provide 1M context with the base model name, so this app keeps `DEEPSEEK_MODEL=deepseek-v4-pro` for the OpenAI-compatible Chat Completions API.

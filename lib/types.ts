@@ -168,6 +168,64 @@ export type OperatingContext = {
   updatedAt: string;
 };
 
+export type MonthlyGoalStatus = "active" | "done" | "paused" | "archived";
+
+export type WeeklyMilestoneStatus =
+  | "planned"
+  | "active"
+  | "done"
+  | "skipped";
+
+export type WeeklyMilestone = {
+  id: string;
+  week: string;
+  outcome: string;
+  mustShip: string;
+  evidence: string[];
+  status: WeeklyMilestoneStatus;
+};
+
+export type MonthlyGoal = {
+  id: string;
+  month: string;
+  title: string;
+  why: string;
+  successMetric: string;
+  targetEvidence: string[];
+  weeklyMilestones: WeeklyMilestone[];
+  constraints: string[];
+  antiGoals: string[];
+  status: MonthlyGoalStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LearningLog = {
+  id: string;
+  date: string;
+  title: string;
+  summary: string;
+  insight: string;
+  source?: string;
+  relatedTaskId?: string;
+  relatedGoalId?: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type KnowledgeCard = {
+  id: string;
+  title: string;
+  body: string;
+  tags: string[];
+  source?: string;
+  relatedTaskId?: string;
+  relatedGoalId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Store = {
   tasks: Task[];
   reviews: DailyReview[];
@@ -177,6 +235,9 @@ export type Store = {
   codexRuns: CodexRun[];
   evidence: Evidence[];
   operatingContext: OperatingContext;
+  monthlyGoals?: MonthlyGoal[];
+  learningLogs?: LearningLog[];
+  knowledgeCards?: KnowledgeCard[];
 };
 
 export type DecisionContextTaskSnapshot = {
@@ -398,6 +459,25 @@ export type CreateAiWeeklyReviewInput = Omit<
   "id" | "createdAt"
 >;
 
+export type CreateMonthlyGoalInput = Omit<
+  MonthlyGoal,
+  "id" | "createdAt" | "updatedAt"
+>;
+
+export type UpdateMonthlyGoalPatch = Partial<
+  Omit<MonthlyGoal, "id" | "createdAt" | "updatedAt">
+>;
+
+export type CreateLearningLogInput = Omit<
+  LearningLog,
+  "id" | "createdAt" | "updatedAt"
+>;
+
+export type CreateKnowledgeCardInput = Omit<
+  KnowledgeCard,
+  "id" | "createdAt" | "updatedAt"
+>;
+
 export type ClarifiedTaskStatus = Extract<
   TaskStatus,
   "inbox" | "active" | "codex_ready" | "waiting" | "frozen"
@@ -485,6 +565,45 @@ export type TaskGateStreamEvent =
   | { type: "thinking"; message: string; reasoningChars: number }
   | { type: "drafting"; message: string; receivedChars: number }
   | { type: "result"; verdict: TaskGateVerdict }
+  | { type: "error"; message: string; code?: string }
+  | { type: "done"; ok: boolean };
+
+export type AssistantStreamIntent =
+  | "quick_answer"
+  | "plan_today"
+  | "daily_review"
+  | "task_breakdown"
+  | "task_gate"
+  | "knowledge_recall"
+  | "schedule";
+
+export type AssistantContextStats = {
+  activeTaskCount: number;
+  monthlyGoalCount: number;
+  recentReviewCount: number;
+  recentAiDailyReviewCount: number;
+  recentLearningLogCount: number;
+  relevantKnowledgeSnippetCount: number;
+  recentEvidenceCount: number;
+};
+
+export type AssistantStreamEvent =
+  | { type: "status"; message: string }
+  | {
+      type: "route";
+      intent: "task_gate";
+      target: "/api/ai/task-gate/stream";
+      message: string;
+    }
+  | { type: "content"; text: string }
+  | { type: "delta"; text: string }
+  | {
+      type: "result";
+      text: string;
+      intent: Exclude<AssistantStreamIntent, "task_gate">;
+      contextStats: AssistantContextStats;
+      fallbackUsed: boolean;
+    }
   | { type: "error"; message: string; code?: string }
   | { type: "done"; ok: boolean };
 

@@ -324,8 +324,34 @@ function normalizeRiskPattern(text: string): string[] {
   }
 
   return driftRules
-    .filter((rule) => rule.keywords.some((keyword) => normalized.includes(keyword)))
+    .filter((rule) => {
+      const matched = rule.keywords.some((keyword) => normalized.includes(keyword));
+
+      if (!matched) {
+        return false;
+      }
+
+      if (isLearningOrReviewRule(rule) && hasAppliedLearningAnchor(normalized)) {
+        return false;
+      }
+
+      return true;
+    })
     .map((rule) => rule.pattern);
+}
+
+function isLearningOrReviewRule(rule: PatternRule) {
+  return rule.keywords.some((keyword) =>
+    ["学习", "研究", "了解", "阅读", "课程", "教程", "调研", "整理", "归纳", "总结"].includes(
+      keyword,
+    ),
+  );
+}
+
+function hasAppliedLearningAnchor(text: string) {
+  return /输出物|产出|交付|应用|用于|服务|当前任务|本月目标|知识卡|复盘|doneWhen|nextAction|完成证据|可复述|insight/i.test(
+    text,
+  );
 }
 
 function normalizeKnownPattern(value: string) {

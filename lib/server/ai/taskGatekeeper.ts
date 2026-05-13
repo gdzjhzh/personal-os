@@ -296,6 +296,10 @@ Return exactly one verdict:
 Rules:
 - If the idea conflicts with currentFocus, prefer reject or ask.
 - If it looks like 泛学习、信息刷屏、系统打磨成瘾、任务过大、只整理不交付、产出不可观察、新方向扩散、逃避用户验证, prefer reject or ask.
+- Learning, research, sorting, summarizing, and review are not automatically low value.
+- Only treat learning as drift when it has no application target, no output artifact, and no link to the current monthly goal, current task, knowledge card, or review.
+- If the user is asking to review, recall, explain, or understand something instead of explicitly creating a task, do not force a task draft. Prefer ask/reject and tell them to use Personal OS Coach for review or knowledge recall.
+- If the user explicitly wants to create a learning task, judge whether it has doneWhen, an application scene, and a concrete output artifact.
 - If the input is too short or ambiguous, prefer ask.
 - If the output cannot be observed within 25 minutes, do not recommend yet.
 - Do not create a task unless verdict is recommend or force is true.

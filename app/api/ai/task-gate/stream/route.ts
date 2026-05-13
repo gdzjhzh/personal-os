@@ -2,11 +2,14 @@ import {
   createDeepSeekRequestId,
   DeepSeekAbortError,
   DeepSeekRequestError,
+  DeepSeekTimeoutError,
   MissingDeepSeekApiKeyError,
   streamDeepSeekChatCompletion,
 } from "@/lib/server/ai/deepseek";
 import { buildDecisionContextPack } from "@/lib/server/ai/decisionContext";
+import { eventStream } from "@/lib/server/ai/eventStream";
 import {
+  buildFallbackVerdict,
   buildForceTaskMessages,
   buildTaskGateMessages,
   parseTaskGateVerdict,
@@ -32,15 +35,13 @@ type TaskGateStreamRequest = {
   previousVerdict?: unknown;
 };
 
-const encoder = new TextEncoder();
-
 export async function POST(request: Request) {
   let body: TaskGateStreamRequest;
 
   try {
     body = (await request.json()) as TaskGateStreamRequest;
   } catch {
-    return eventStream((send) => {
+    return eventStream<TaskGateStreamEvent>((send) => {
       send("error", {
         type: "error",
         message: "请求内容不是合法 JSON，无法开始 AI 任务准入。",
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
   const rawTask = stringOrEmpty(body.rawTask);
 
   if (!rawTask) {
-    return eventStream((send) => {
+    return eventStream<TaskGateStreamEvent>((send) => {
       send("error", {
         type: "error",
         message: "请先输入一个想法，再和 AI 讨论是否值得生成任务。",
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
     });
   }
 
-  return eventStream((send, close, streamSignal) => {
+  return eventStream<TaskGateStreamEvent>((send, close, streamSignal) => {
     const requestId = `task_gate_${createDeepSeekRequestId()}`;
     const deepSeekAbort = new AbortController();
     let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
@@ -136,6 +137,7 @@ export async function POST(request: Request) {
           requestId,
           responseFormat: "json_object",
           maxTokens: promptInput.force ? 1800 : 2200,
+          deadlineMs: promptInput.force ? 18000 : 22000,
           signal: deepSeekAbort.signal,
         })) {
           if (chunk.type === "reasoning") {
@@ -173,7 +175,17 @@ export async function POST(request: Request) {
           }
         }
 
-        const verdict = parseTaskGateVerdict(finalContent, promptInput);
+        const verdict = parseTaskGateVerdictWithFallback({
+          finalContent,
+          promptInput,
+          requestId,
+          startedAt,
+          send,
+        });
+
+        if (!verdict) {
+          return;
+        }
 
         send("result", {
           type: "result",
@@ -190,6 +202,18 @@ export async function POST(request: Request) {
           reasoningChars,
         });
       } catch (error) {
+        if (promptInput && shouldReturnFallback(error)) {
+          sendFallbackVerdict({
+            promptInput,
+            requestId,
+            startedAt,
+            send,
+            statusMessage: fallbackStatusMessage(error),
+            error,
+          });
+          return;
+        }
+
         const event = toTaskGateErrorEvent(error);
 
         if (!(error instanceof DeepSeekAbortError)) {
@@ -219,68 +243,105 @@ export async function POST(request: Request) {
   });
 }
 
-function eventStream(
-  start: (
-    send: <T extends TaskGateStreamEvent["type"]>(
-      event: T,
-      data: Extract<TaskGateStreamEvent, { type: T }>,
-    ) => void,
-    close: () => void,
-    signal: AbortSignal,
-  ) => void,
+function parseTaskGateVerdictWithFallback({
+  finalContent,
+  promptInput,
+  requestId,
+  send,
+  startedAt,
+}: {
+  finalContent: string;
+  promptInput: TaskGatePromptInput;
+  requestId: string;
+  startedAt: number;
+  send: <T extends TaskGateStreamEvent["type"]>(
+    event: T,
+    data: Extract<TaskGateStreamEvent, { type: T }>,
+  ) => void;
+}) {
+  try {
+    return parseTaskGateVerdict(finalContent, promptInput);
+  } catch (error) {
+    if (error instanceof TaskGatekeeperError) {
+      sendFallbackVerdict({
+        promptInput,
+        requestId,
+        startedAt,
+        send,
+        statusMessage: "AI 输出格式不稳定，先给出保守判断。",
+        error,
+      });
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function shouldReturnFallback(
+  error: unknown,
 ) {
-  const streamAbort = new AbortController();
-  let closed = false;
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      function send<T extends TaskGateStreamEvent["type"]>(
-        event: T,
-        data: Extract<TaskGateStreamEvent, { type: T }>,
-      ) {
-        if (closed || streamAbort.signal.aborted) {
-          return;
-        }
+  return (
+    error instanceof DeepSeekTimeoutError ||
+    error instanceof MissingDeepSeekApiKeyError ||
+    error instanceof TaskGatekeeperError
+  );
+}
 
-        try {
-          controller.enqueue(
-            encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-          );
-        } catch {
-          closed = true;
-          streamAbort.abort();
-        }
-      }
+function sendFallbackVerdict({
+  error,
+  promptInput,
+  requestId,
+  send,
+  startedAt,
+  statusMessage,
+}: {
+  error: unknown;
+  promptInput: TaskGatePromptInput;
+  requestId: string;
+  startedAt: number;
+  statusMessage: string;
+  send: <T extends TaskGateStreamEvent["type"]>(
+    event: T,
+    data: Extract<TaskGateStreamEvent, { type: T }>,
+  ) => void;
+}) {
+  const verdict = buildFallbackVerdict(promptInput);
 
-      function close() {
-        if (closed) {
-          return;
-        }
-
-        closed = true;
-
-        try {
-          controller.close();
-        } catch {
-          // The client may have closed the connection first.
-        }
-      }
-
-      start(send, close, streamAbort.signal);
-    },
-    cancel() {
-      closed = true;
-      streamAbort.abort();
-    },
+  send("status", {
+    type: "status",
+    message: statusMessage,
   });
-
-  return new Response(stream, {
-    headers: {
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "X-Accel-Buffering": "no",
-    },
+  send("result", {
+    type: "result",
+    verdict,
   });
+  send("done", { type: "done", ok: true });
+
+  console.warn("[ai.taskGate] stream:fallback", {
+    requestId,
+    elapsedMs: Date.now() - startedAt,
+    force: promptInput.force,
+    verdict: verdict.verdict,
+    fallbackUsed: true,
+    error: describeError(error),
+  });
+}
+
+function fallbackStatusMessage(error: unknown) {
+  if (error instanceof MissingDeepSeekApiKeyError) {
+    return "当前未配置 AI Key，先给出保守的任务准入判断。";
+  }
+
+  if (error instanceof DeepSeekTimeoutError) {
+    return "AI 任务准入响应超时，先给出保守判断，避免页面空白。";
+  }
+
+  if (error instanceof TaskGatekeeperError) {
+    return "AI 输出格式不稳定，先给出保守判断。";
+  }
+
+  return "AI 任务准入暂时不可用，先给出保守判断。";
 }
 
 function toTaskGateErrorEvent(

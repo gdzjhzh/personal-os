@@ -5,7 +5,7 @@ export type DeepSeekMessage = {
 
 type DeepSeekChatCompletionOptions = {
   messages: DeepSeekMessage[];
-  reasoningEffort?: DeepSeekReasoningEffort;
+  reasoningEffort?: DeepSeekReasoningEffort | null;
   requestId?: string;
   responseFormat?: "json_object";
   maxTokens?: number;
@@ -99,7 +99,7 @@ export class DeepSeekAbortError extends DeepSeekRequestError {
 
 export async function createDeepSeekChatCompletion({
   messages,
-  reasoningEffort = readReasoningEffortFromEnv(),
+  reasoningEffort,
   requestId = createDeepSeekRequestId(),
   responseFormat,
   maxTokens,
@@ -114,11 +114,13 @@ export async function createDeepSeekChatCompletion({
   }
 
   const model = currentDeepSeekModel();
+  const resolvedReasoningEffort =
+    reasoningEffort === undefined ? readReasoningEffortFromEnv() : reasoningEffort;
   const promptChars = countPromptChars(messages);
   console.info("[ai.deepseek] request:start", {
     requestId,
     model,
-    reasoningEffort,
+    reasoningEffort: resolvedReasoningEffort || null,
     responseFormat: responseFormat || null,
     maxTokens: maxTokens || null,
     maxAttempts: DEEPSEEK_MAX_ATTEMPTS,
@@ -130,7 +132,9 @@ export async function createDeepSeekChatCompletion({
     model,
     messages,
     thinking: { type: "enabled" },
-    reasoning_effort: reasoningEffort,
+    ...(resolvedReasoningEffort
+      ? { reasoning_effort: resolvedReasoningEffort }
+      : {}),
     ...(responseFormat
       ? { response_format: { type: responseFormat } }
       : {}),
@@ -254,7 +258,7 @@ export async function createDeepSeekChatCompletion({
 
 export async function* streamDeepSeekChatCompletion({
   messages,
-  reasoningEffort = readReasoningEffortFromEnv(),
+  reasoningEffort,
   requestId = createDeepSeekRequestId(),
   responseFormat,
   maxTokens,
@@ -270,12 +274,16 @@ export async function* streamDeepSeekChatCompletion({
   }
 
   const model = currentDeepSeekModel();
+  const resolvedReasoningEffort =
+    reasoningEffort === undefined ? readReasoningEffortFromEnv() : reasoningEffort;
   const promptChars = countPromptChars(messages);
   const body = JSON.stringify({
     model,
     messages,
     thinking: { type: "enabled" },
-    reasoning_effort: reasoningEffort,
+    ...(resolvedReasoningEffort
+      ? { reasoning_effort: resolvedReasoningEffort }
+      : {}),
     ...(responseFormat
       ? { response_format: { type: responseFormat } }
       : {}),
@@ -304,7 +312,7 @@ export async function* streamDeepSeekChatCompletion({
   console.info("[ai.deepseek] stream:start", {
     requestId,
     model,
-    reasoningEffort,
+    reasoningEffort: resolvedReasoningEffort || null,
     responseFormat: responseFormat || null,
     maxTokens: maxTokens || null,
     deadlineMs: deadlineMs || null,
@@ -431,7 +439,7 @@ export async function* streamDeepSeekChatCompletion({
     console.info("[ai.deepseek] stream:finish", {
       requestId,
       model,
-      reasoningEffort,
+      reasoningEffort: resolvedReasoningEffort || null,
       promptChars,
       elapsedMs: Date.now() - startedAt,
       contentChars,

@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { AiTaskClarifier } from "@/components/ai-task-clarifier";
+import { PersonalCoach } from "@/components/personal-coach";
 import { generateCodexPacket } from "@/lib/server/codexPacket";
 import {
   DeepSeekRequestError,
@@ -152,6 +153,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
   const p0Decision = chooseTodayP0(tasks);
   const currentP0 = chooseExplicitOrFallbackP0(tasks, today, p0Decision.task);
   const notices = getNotices(params);
+  const aiModelInfo = getDeepSeekModelInfo();
 
   return (
     <main className="min-h-screen bg-[#080908] px-3 py-4 font-sans text-zinc-100 sm:px-5 lg:px-8">
@@ -184,6 +186,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
 
           {view === "tasks" ? (
             <TodayTasksView
+              aiModelInfo={aiModelInfo}
               today={today}
               tasks={tasks}
               productTeardownCount={productTeardowns.length}
@@ -203,7 +206,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
           ) : null}
 
           {view === "new-task" ? (
-            <NewTaskView aiModelInfo={getDeepSeekModelInfo()} today={today} />
+            <NewTaskView aiModelInfo={aiModelInfo} today={today} />
           ) : null}
         </div>
       </div>
@@ -212,10 +215,12 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
 }
 
 function TodayTasksView({
+  aiModelInfo,
   today,
   tasks,
   productTeardownCount,
 }: {
+  aiModelInfo: ReturnType<typeof getDeepSeekModelInfo>;
   today: string;
   tasks: Task[];
   productTeardownCount: number;
@@ -230,6 +235,7 @@ function TodayTasksView({
 
   return (
     <div className="grid gap-4">
+      <PersonalCoach modelInfo={aiModelInfo} />
       <FocusPanel task={todayP0} />
       <ProgressPanel
         productProgress={productProgress}

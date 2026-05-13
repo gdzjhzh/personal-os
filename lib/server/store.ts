@@ -6,15 +6,23 @@ import type {
   AiWeeklyReview,
   CreateAiDailyReviewInput,
   CreateAiWeeklyReviewInput,
+  CreateKnowledgeCardInput,
+  CreateLearningLogInput,
+  CreateMonthlyGoalInput,
   CreateProductTeardownInput,
   CreateReviewInput,
   CreateTaskInput,
+  KnowledgeCard,
+  LearningLog,
+  MonthlyGoal,
   OperatingContext,
   ProductTeardown,
   Store,
   Task,
   TaskStatus,
+  UpdateMonthlyGoalPatch,
   UpdateTaskPatch,
+  WeeklyMilestone,
 } from "@/lib/types";
 import { chooseTodayP0 } from "@/lib/server/scoring";
 import {
@@ -198,6 +206,116 @@ export async function createAiWeeklyReview(input: CreateAiWeeklyReviewInput) {
   return review;
 }
 
+export async function createMonthlyGoal(input: CreateMonthlyGoalInput) {
+  const store = await readStore();
+  const now = new Date().toISOString();
+  const goal: MonthlyGoal = {
+    id: crypto.randomUUID(),
+    month: input.month.trim(),
+    title: input.title.trim(),
+    why: input.why.trim(),
+    successMetric: input.successMetric.trim(),
+    targetEvidence: cleanStringArray(input.targetEvidence),
+    weeklyMilestones: normalizeWeeklyMilestones(input.weeklyMilestones),
+    constraints: cleanStringArray(input.constraints),
+    antiGoals: cleanStringArray(input.antiGoals),
+    status: input.status || "active",
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  store.monthlyGoals = store.monthlyGoals || [];
+  store.monthlyGoals.push(goal);
+  await writeStore(store);
+  return goal;
+}
+
+export async function updateMonthlyGoal(
+  id: string,
+  patch: UpdateMonthlyGoalPatch,
+) {
+  const store = await readStore();
+  store.monthlyGoals = store.monthlyGoals || [];
+  const index = store.monthlyGoals.findIndex((goal) => goal.id === id);
+
+  if (index === -1) {
+    throw new Error(`Monthly goal not found: ${id}`);
+  }
+
+  const current = store.monthlyGoals[index];
+  const next: MonthlyGoal = {
+    ...current,
+    ...patch,
+    month: patch.month?.trim() || current.month,
+    title: patch.title?.trim() || current.title,
+    why: patch.why?.trim() ?? current.why,
+    successMetric: patch.successMetric?.trim() || current.successMetric,
+    targetEvidence: patch.targetEvidence
+      ? cleanStringArray(patch.targetEvidence)
+      : current.targetEvidence,
+    weeklyMilestones: patch.weeklyMilestones
+      ? normalizeWeeklyMilestones(patch.weeklyMilestones)
+      : current.weeklyMilestones,
+    constraints: patch.constraints
+      ? cleanStringArray(patch.constraints)
+      : current.constraints,
+    antiGoals: patch.antiGoals ? cleanStringArray(patch.antiGoals) : current.antiGoals,
+    updatedAt: new Date().toISOString(),
+  };
+
+  store.monthlyGoals[index] = next;
+  await writeStore(store);
+  return next;
+}
+
+export async function archiveMonthlyGoal(id: string) {
+  return updateMonthlyGoal(id, { status: "archived" });
+}
+
+export async function createLearningLog(input: CreateLearningLogInput) {
+  const store = await readStore();
+  const now = new Date().toISOString();
+  const log: LearningLog = {
+    id: crypto.randomUUID(),
+    date: input.date.trim(),
+    title: input.title.trim(),
+    summary: input.summary.trim(),
+    insight: input.insight.trim(),
+    source: emptyToUndefined(input.source),
+    relatedTaskId: emptyToUndefined(input.relatedTaskId),
+    relatedGoalId: emptyToUndefined(input.relatedGoalId),
+    tags: cleanStringArray(input.tags),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  store.learningLogs = store.learningLogs || [];
+  store.learningLogs.push(log);
+  await writeStore(store);
+  return log;
+}
+
+export async function createKnowledgeCard(input: CreateKnowledgeCardInput) {
+  const store = await readStore();
+  const now = new Date().toISOString();
+  const card: KnowledgeCard = {
+    id: crypto.randomUUID(),
+    title: input.title.trim(),
+    body: input.body.trim(),
+    tags: cleanStringArray(input.tags),
+    source: emptyToUndefined(input.source),
+    relatedTaskId: emptyToUndefined(input.relatedTaskId),
+    relatedGoalId: emptyToUndefined(input.relatedGoalId),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  store.knowledgeCards = store.knowledgeCards || [];
+  store.knowledgeCards.push(card);
+  await writeStore(store);
+  return card;
+}
+
 export async function exportDailyMarkdown(date: string) {
   const store = await readStore();
   const latestReview = [...store.reviews]
@@ -290,6 +408,9 @@ function createSeedStore(): Store {
     codexRuns: [],
     evidence: [],
     operatingContext: createDefaultOperatingContext(now),
+    monthlyGoals: [],
+    learningLogs: [],
+    knowledgeCards: [],
   };
 }
 
@@ -312,6 +433,11 @@ function normalizeStore(value: unknown): Store {
     codexRuns: Array.isArray(store.codexRuns) ? store.codexRuns : [],
     evidence: Array.isArray(store.evidence) ? store.evidence : [],
     operatingContext: normalizeOperatingContext(store.operatingContext, now),
+    monthlyGoals: Array.isArray(store.monthlyGoals) ? store.monthlyGoals : [],
+    learningLogs: Array.isArray(store.learningLogs) ? store.learningLogs : [],
+    knowledgeCards: Array.isArray(store.knowledgeCards)
+      ? store.knowledgeCards
+      : [],
   };
 }
 
@@ -381,6 +507,34 @@ function nextTaskCode(tasks: Task[]) {
 function emptyToUndefined(value?: string) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function cleanStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeWeeklyMilestones(value: WeeklyMilestone[]) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((milestone) => ({
+      id: milestone.id?.trim() || crypto.randomUUID(),
+      week: milestone.week?.trim() || "",
+      outcome: milestone.outcome?.trim() || "",
+      mustShip: milestone.mustShip?.trim() || "",
+      evidence: cleanStringArray(milestone.evidence),
+      status: milestone.status || "planned",
+    }))
+    .filter((milestone) => milestone.week && milestone.outcome);
 }
 
 export const TASK_STATUSES: TaskStatus[] = [
