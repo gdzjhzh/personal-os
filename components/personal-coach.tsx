@@ -43,7 +43,7 @@ const quickActions: CoachQuickAction[] = [
     prompt: "我最近学到了什么？哪些 insight 可以服务当前月目标或当前任务？",
   },
   {
-    label: "判断是否进入任务系统",
+    label: "转到任务准入判断",
     mode: "task_gate",
     prompt: "",
     requiresInput: true,
@@ -247,7 +247,7 @@ export function PersonalCoach({
             问超级助手
           </h2>
           <p className="max-w-3xl text-sm leading-6 text-zinc-500">
-            用来做今日计划、任务拆解、复盘、知识回顾和普通问答；只有明确要新增任务或判断是否进入任务系统时，才切到任务准入。
+            同一个 AI 模型，不同工作流：这里负责今日计划、复盘、知识回顾、解释问题和拆解已有任务，不会直接写入任务池；只有明确要把想法变成任务时，才切到 AI 任务准入。
           </p>
         </div>
         <div className="w-fit border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs leading-5 text-zinc-400">

@@ -165,7 +165,7 @@ export function AiTaskClarifier({
               AI 任务准入
             </h2>
             <p className="max-w-3xl text-sm leading-6 text-zinc-500">
-              先判断这个想法是否值得进入任务系统。AI 会结合你的愿景、当前任务、复盘和近期风险与你讨论；没问题再生成任务。不符合当前情况时，它会建议暂不生成，除非你强制执行。
+              这是任务梳理前的闸门：先判断这个想法是否值得进入任务系统，再生成可保存的任务草稿。和超级助手不同，这里的结果会围绕 nextAction、doneWhen、优先级、风险和是否写入任务池展开。
             </p>
           </div>
           <div className="w-fit border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs leading-5 text-zinc-400">
