@@ -69,6 +69,7 @@ export async function POST(request: Request) {
     let contextPack: CoachContextPack | undefined;
     let resolvedIntent: AssistantIntent = "quick_answer";
     let fallbackUsed = false;
+    let finalText = "";
 
     const abortDeepSeek = () => deepSeekAbort.abort();
     request.signal.addEventListener("abort", abortDeepSeek, { once: true });
@@ -118,7 +119,6 @@ export async function POST(request: Request) {
           dialogMessages: readDialogMessages(body.dialogMessages),
           todayCapacity: stringOrEmpty(body.todayCapacity),
         });
-        let finalText = "";
 
         for await (const chunk of streamDeepSeekChatCompletion({
           messages,
@@ -167,11 +167,38 @@ export async function POST(request: Request) {
           return;
         }
 
-        const fallbackReason = fallbackReasonFromError(error);
-        fallbackUsed = true;
         contextPack =
           contextPack || buildCoachContextPack(rawInput, createEmptyStore());
 
+        if (error instanceof DeepSeekTimeoutError && hasUsefulPartial(finalText)) {
+          const partialText = finalizePartialText(finalText);
+          send("status", {
+            type: "status",
+            message: "模型还没完全收尾，已保留已经流式生成的内容。",
+          });
+          send("result", {
+            type: "result",
+            text: partialText,
+            intent: toCoachMode(resolvedIntent),
+            contextStats: contextPack.contextStats,
+            fallbackUsed: false,
+          });
+          send("done", { type: "done", ok: true });
+
+          console.warn("[ai.assistant] stream:partial_timeout", {
+            requestId,
+            intent: resolvedIntent,
+            elapsedMs: Date.now() - startedAt,
+            fallbackUsed: false,
+            partialChars: partialText.length,
+            error: describeError(error),
+            contextStats: contextPack.contextStats,
+          });
+          return;
+        }
+
+        const fallbackReason = fallbackReasonFromError(error);
+        fallbackUsed = true;
         const fallback = buildAssistantFallback({
           intent: toCoachMode(resolvedIntent),
           rawInput,
@@ -271,6 +298,19 @@ function fallbackStatusMessage(reason: ReturnType<typeof fallbackReasonFromError
   }
 
   return "AI 请求暂时不可用，先返回可用的本地兜底结果。";
+}
+
+function hasUsefulPartial(text: string): boolean {
+  return text.trim().length >= 80;
+}
+
+function finalizePartialText(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  return `${trimmed}\n\n（模型响应超时，已保留当前流式内容。你可以先按上面的建议执行，或继续追问补全。）`;
 }
 
 function fallbackReasonFromError(
