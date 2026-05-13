@@ -21,6 +21,19 @@ export type TaskGateInitialPayload = {
   currentPhaseContext: string;
 };
 
+export type TaskGateSessionSnapshot = {
+  initialPayload: TaskGateInitialPayload;
+  dialogMessages: TaskGateDialogMessage[];
+  result: TaskGateVerdict | null;
+  lastCompletedVerdict: TaskGateVerdict | null;
+  showSupplement: boolean;
+  supplement: string;
+  lastRequestWasForce: boolean;
+  error: string;
+  statusLine: string;
+  updatedAt: string;
+};
+
 type TaskGateRequestPayload = {
   rawTask: string;
   project: string;
@@ -37,24 +50,48 @@ type SseFrame = {
 
 export function TaskGateDialog({
   initialPayload,
+  initialSession,
+  onSessionChange,
+  onTaskSaved,
   onClose,
 }: {
   initialPayload: TaskGateInitialPayload;
+  initialSession?: TaskGateSessionSnapshot;
+  onSessionChange?: (session: TaskGateSessionSnapshot) => void;
+  onTaskSaved?: () => void;
   onClose: () => void;
 }) {
-  const [statusLine, setStatusLine] = useState("正在连接 AI…");
+  const initialSessionRef = useRef(initialSession);
+  const didInitialRunRef = useRef(false);
+  const [statusLine, setStatusLine] = useState(
+    initialSession?.result
+      ? "已恢复上次判断结果。"
+      : initialSession
+        ? "已恢复上次未完成的讨论，正在重新连接 AI…"
+        : "正在连接 AI…",
+  );
   const [heartbeatLine, setHeartbeatLine] = useState("");
   const [reasoningChars, setReasoningChars] = useState(0);
   const [receivedChars, setReceivedChars] = useState(0);
-  const [result, setResult] = useState<TaskGateVerdict | null>(null);
-  const [error, setError] = useState("");
+  const [result, setResult] = useState<TaskGateVerdict | null>(
+    initialSession?.result || null,
+  );
+  const [lastCompletedVerdict, setLastCompletedVerdict] =
+    useState<TaskGateVerdict | null>(
+      initialSession?.lastCompletedVerdict || initialSession?.result || null,
+    );
+  const [error, setError] = useState(initialSession?.error || "");
   const [isStreaming, setIsStreaming] = useState(false);
   const [dialogMessages, setDialogMessages] = useState<TaskGateDialogMessage[]>(
-    [],
+    initialSession?.dialogMessages || [],
   );
-  const [showSupplement, setShowSupplement] = useState(false);
-  const [supplement, setSupplement] = useState("");
-  const [lastRequestWasForce, setLastRequestWasForce] = useState(false);
+  const [showSupplement, setShowSupplement] = useState(
+    Boolean(initialSession?.showSupplement),
+  );
+  const [supplement, setSupplement] = useState(initialSession?.supplement || "");
+  const [lastRequestWasForce, setLastRequestWasForce] = useState(
+    Boolean(initialSession?.lastRequestWasForce),
+  );
   const abortRef = useRef<AbortController | null>(null);
   const requestSeqRef = useRef(0);
 
@@ -84,6 +121,9 @@ export function TaskGateDialog({
     setHeartbeatLine("");
     setReasoningChars(0);
     setReceivedChars(0);
+    if (payload.previousVerdict) {
+      setLastCompletedVerdict(payload.previousVerdict);
+    }
     setResult(null);
     setError("");
     setLastRequestWasForce(Boolean(payload.force));
@@ -155,8 +195,30 @@ export function TaskGateDialog({
   }, []);
 
   useEffect(() => {
+    if (didInitialRunRef.current) {
+      return;
+    }
+
+    didInitialRunRef.current = true;
+
+    const restoredSession = initialSessionRef.current;
+
+    if (restoredSession?.result) {
+      return;
+    }
+
     const timer = window.setTimeout(() => {
-      void runStream(basePayload);
+      void runStream(
+        restoredSession
+          ? {
+              ...basePayload,
+              dialogMessages: restoredSession.dialogMessages,
+              force: restoredSession.lastRequestWasForce,
+              previousVerdict:
+                restoredSession.lastCompletedVerdict || undefined,
+            }
+          : basePayload,
+      );
     }, 0);
 
     return () => {
@@ -165,6 +227,32 @@ export function TaskGateDialog({
       abortRef.current?.abort();
     };
   }, [basePayload, initialPayload.requestKey, runStream]);
+
+  useEffect(() => {
+    onSessionChange?.({
+      initialPayload,
+      dialogMessages,
+      result,
+      lastCompletedVerdict,
+      showSupplement,
+      supplement,
+      lastRequestWasForce,
+      error,
+      statusLine,
+      updatedAt: new Date().toISOString(),
+    });
+  }, [
+    dialogMessages,
+    error,
+    initialPayload,
+    lastCompletedVerdict,
+    lastRequestWasForce,
+    onSessionChange,
+    result,
+    showSupplement,
+    statusLine,
+    supplement,
+  ]);
 
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
@@ -213,6 +301,7 @@ export function TaskGateDialog({
 
     if (event.type === "result") {
       setResult(event.verdict);
+      setLastCompletedVerdict(event.verdict);
       setStatusLine("判断完成。");
       setDialogMessages((messages) => [
         ...messages,
@@ -387,6 +476,7 @@ export function TaskGateDialog({
                 onClose={closeDialog}
                 onForce={forceGenerate}
                 onOption={continueWithOption}
+                onTaskSaved={onTaskSaved}
                 verdict={result}
               />
             ) : null}
@@ -508,12 +598,14 @@ function VerdictCard({
   onClose,
   onForce,
   onOption,
+  onTaskSaved,
   verdict,
 }: {
   isForceResult: boolean;
   onClose: () => void;
   onForce: () => void;
   onOption: (option: TaskGateOption) => void;
+  onTaskSaved?: () => void;
   verdict: TaskGateVerdict;
 }) {
   const title = isForceResult
@@ -562,6 +654,7 @@ function VerdictCard({
       {verdict.taskDraft ? (
         <TaskDraftPreview
           forceMode={isForceResult}
+          onTaskSaved={onTaskSaved}
           task={verdict.taskDraft}
         />
       ) : null}
@@ -697,9 +790,11 @@ function ForceSuggestion({
 
 function TaskDraftPreview({
   forceMode,
+  onTaskSaved,
   task,
 }: {
   forceMode: boolean;
+  onTaskSaved?: () => void;
   task: ClarifiedTaskDraft;
 }) {
   return (
@@ -711,7 +806,11 @@ function TaskDraftPreview({
             {task.title}
           </h5>
         </div>
-        <SaveGateTaskForm forceMode={forceMode} task={task} />
+        <SaveGateTaskForm
+          forceMode={forceMode}
+          onTaskSaved={onTaskSaved}
+          task={task}
+        />
       </div>
 
       <dl className="grid gap-3 text-sm md:grid-cols-2">
@@ -732,15 +831,21 @@ function TaskDraftPreview({
 
 function SaveGateTaskForm({
   forceMode,
+  onTaskSaved,
   task,
 }: {
   forceMode: boolean;
+  onTaskSaved?: () => void;
   task: ClarifiedTaskDraft;
 }) {
   const [planForToday, setPlanForToday] = useState(!forceMode);
 
   return (
-    <form action={saveGateTaskAction} className="grid gap-2 md:w-64">
+    <form
+      action={saveGateTaskAction}
+      className="grid gap-2 md:w-64"
+      onSubmit={onTaskSaved}
+    >
       <input type="hidden" name="taskJson" value={JSON.stringify(task)} />
       <input type="hidden" name="forceMode" value={forceMode ? "true" : "false"} />
       <input
