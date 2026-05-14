@@ -81,12 +81,47 @@ describe("assistant stream route", () => {
     expect(result?.fallbackUsed).toBe(false);
     expect(mocks.streamImpl).toHaveBeenCalledWith(
       expect.objectContaining({
-        deadlineMs: 16000,
-        deadlineMode: "until_first_content",
-        idleTimeoutMs: 60000,
+        deadlineMs: undefined,
+        deadlineMode: "overall",
+        idleTimeoutMs: 180000,
+        reasoningEffort: "high",
       }),
     );
     expect(events.at(-1)).toEqual({ type: "done", ok: true });
+  });
+
+  it("streams thinking chunks before the final answer", async () => {
+    mocks.streamImpl.mockImplementation(async function* () {
+      yield { type: "reasoning", text: "先判断目标和约束。" };
+      yield { type: "reasoning", text: "再收敛到一个可执行动作。" };
+      yield { type: "content", text: "## 建议\n先做最小验证。" };
+    });
+
+    const events = await postAssistant({
+      rawInput: "如果要开发一个小程序要怎么做",
+    });
+    const thinking = events.filter(
+      (event): event is Extract<AssistantStreamEvent, { type: "thinking" }> =>
+        event.type === "thinking",
+    );
+    const result = events.find(
+      (event): event is Extract<AssistantStreamEvent, { type: "result" }> =>
+        event.type === "result",
+    );
+
+    expect(thinking.map((event) => event.text).join("")).toBe(
+      "先判断目标和约束。再收敛到一个可执行动作。",
+    );
+    expect(result?.text).toContain("先做最小验证");
+    expect(result?.fallbackUsed).toBe(false);
+    expect(mocks.streamImpl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reasoningEffort: "high",
+        deadlineMs: undefined,
+        deadlineMode: "overall",
+        idleTimeoutMs: 180000,
+      }),
+    );
   });
 
   it("uses explicit context wording for today planning", async () => {

@@ -595,6 +595,7 @@ export type AssistantStreamEvent =
       target: "/api/ai/task-gate/stream";
       message: string;
     }
+  | { type: "thinking"; text: string }
   | { type: "content"; text: string }
   | { type: "delta"; text: string }
   | {

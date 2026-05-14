@@ -335,6 +335,7 @@ export async function* streamDeepSeekChatCompletion({
   const removeExternalAbort = linkExternalSignal(signal, controller, () => {
     externalAborted = true;
   });
+  refreshIdleDeadline();
 
   console.info("[ai.deepseek] stream:start", {
     requestId,
@@ -390,6 +391,8 @@ export async function* streamDeepSeekChatCompletion({
         break;
       }
 
+      refreshIdleDeadline();
+
       const parsed = parseStreamPayload(payload);
       const delta = parsed.choices?.[0]?.delta;
       const reasoningText = delta?.reasoning_content;
@@ -405,9 +408,6 @@ export async function* streamDeepSeekChatCompletion({
         contentChars += contentText.length;
         if (deadlineMode === "until_first_content" && !hadContent) {
           clearDeadline();
-        }
-        if (deadlineMode === "until_first_content") {
-          refreshIdleDeadline();
         }
         yield { type: "content", text: contentText };
       }

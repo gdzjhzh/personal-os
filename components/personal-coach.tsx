@@ -62,6 +62,7 @@ export function PersonalCoach({
   const [input, setInput] = useState("");
   const [statusLine, setStatusLine] = useState("等待你的问题。");
   const [contextLine, setContextLine] = useState("");
+  const [thinkingText, setThinkingText] = useState("");
   const [answer, setAnswer] = useState("");
   const [error, setError] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -90,6 +91,11 @@ export function PersonalCoach({
       setStatusLine(event.message);
     }
 
+    if (event.type === "thinking") {
+      setThinkingText((current) => `${current}${event.text}`);
+      setStatusLine("模型正在强思考，思考过程会持续显示。");
+    }
+
     if (event.type === "delta" || event.type === "content") {
       setAnswer((current) => `${current}${event.text}`);
     }
@@ -104,6 +110,7 @@ export function PersonalCoach({
     if (event.type === "route") {
       setStatusLine(event.message);
       setContextLine("");
+      setThinkingText("");
       setTaskGatePayload({
         requestKey: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         rawTask: rawInput,
@@ -144,6 +151,7 @@ export function PersonalCoach({
       setAnswer("");
       setError("");
       setContextLine("");
+      setThinkingText("");
       setActiveIntent(mode || "quick_answer");
       setStatusLine("已发送，正在连接 Personal OS Coach…");
 
@@ -351,6 +359,15 @@ export function PersonalCoach({
           </p>
         ) : null}
       </div>
+
+      {thinkingText ? (
+        <section className="grid gap-2 border border-zinc-800 bg-zinc-950/50 p-4 text-sm">
+          <h3 className="text-xs font-semibold text-zinc-400">思考过程</h3>
+          <div className="max-h-72 overflow-y-auto whitespace-pre-wrap leading-7 text-zinc-300">
+            {thinkingText}
+          </div>
+        </section>
+      ) : null}
 
       {answer ? (
         <article className="whitespace-pre-wrap border border-zinc-800 bg-zinc-950/70 p-4 text-sm leading-7 text-zinc-100">

@@ -57,6 +57,49 @@ describe("streamDeepSeekChatCompletion deadline modes", () => {
     source.close();
     await expect(done).resolves.toEqual({ done: true, value: undefined });
   });
+
+  it("treats reasoning chunks as active stream progress for idle timeout", async () => {
+    const source = createSseSource();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(source.stream, { status: 200 })),
+    );
+
+    const chunks = streamDeepSeekChatCompletion({
+      messages: [{ role: "user", content: "认真想一下" }],
+      idleTimeoutMs: 10,
+    });
+
+    const first = chunks.next();
+    await Promise.resolve();
+    source.sendJson({ choices: [{ delta: { reasoning_content: "先想 A" } }] });
+    await expect(first).resolves.toEqual({
+      done: false,
+      value: { type: "reasoning", text: "先想 A" },
+    });
+
+    const second = chunks.next();
+    await vi.advanceTimersByTimeAsync(8);
+    source.sendJson({ choices: [{ delta: { reasoning_content: "再想 B" } }] });
+    await expect(second).resolves.toEqual({
+      done: false,
+      value: { type: "reasoning", text: "再想 B" },
+    });
+
+    const third = chunks.next();
+    await vi.advanceTimersByTimeAsync(8);
+    source.sendJson({ choices: [{ delta: { content: "最后回答" } }] });
+    await expect(third).resolves.toEqual({
+      done: false,
+      value: { type: "content", text: "最后回答" },
+    });
+
+    const done = chunks.next();
+    await Promise.resolve();
+    source.sendDone();
+    source.close();
+    await expect(done).resolves.toEqual({ done: true, value: undefined });
+  });
 });
 
 function createSseSource() {
