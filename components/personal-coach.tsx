@@ -360,11 +360,11 @@ export function PersonalCoach({
         ) : null}
       </div>
 
-      {thinkingText ? (
+      {isStreaming || thinkingText ? (
         <section className="grid gap-2 border border-zinc-800 bg-zinc-950/50 p-4 text-sm">
           <h3 className="text-xs font-semibold text-zinc-400">思考过程</h3>
           <div className="max-h-72 overflow-y-auto whitespace-pre-wrap leading-7 text-zinc-300">
-            {thinkingText}
+            {thinkingText || "等待模型开始输出思考…"}
           </div>
         </section>
       ) : null}
