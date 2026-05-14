@@ -25,6 +25,17 @@ type SseFrame = {
   data: string;
 };
 
+type AssistantDialogMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+type AssistantRequestContext = {
+  rawInput: string;
+  history: AssistantDialogMessage[];
+  onResult?: () => void;
+};
+
 const quickActions: CoachQuickAction[] = [
   {
     label: "今天怎么安排",
@@ -64,6 +75,10 @@ export function PersonalCoach({
   const [contextLine, setContextLine] = useState("");
   const [thinkingText, setThinkingText] = useState("");
   const [answer, setAnswer] = useState("");
+  const [followupInput, setFollowupInput] = useState("");
+  const [dialogMessages, setDialogMessages] = useState<AssistantDialogMessage[]>(
+    [],
+  );
   const [error, setError] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [activeIntent, setActiveIntent] =
@@ -73,64 +88,79 @@ export function PersonalCoach({
   const abortRef = useRef<AbortController | null>(null);
   const requestSeqRef = useRef(0);
 
-  const handleStreamEvent = useCallback((frame: SseFrame, rawInput: string) => {
-    if (!frame.data) {
-      return;
-    }
+  const handleStreamEvent = useCallback(
+    (frame: SseFrame, requestContext: AssistantRequestContext) => {
+      if (!frame.data) {
+        return;
+      }
 
-    let event: AssistantStreamEvent;
+      let event: AssistantStreamEvent;
 
-    try {
-      event = JSON.parse(frame.data) as AssistantStreamEvent;
-    } catch {
-      setError("超级助手返回了无法解析的事件。请重试，或把问题缩短后再发送。");
-      return;
-    }
+      try {
+        event = JSON.parse(frame.data) as AssistantStreamEvent;
+      } catch {
+        setError("超级助手返回了无法解析的事件。请重试，或把问题缩短后再发送。");
+        return;
+      }
 
-    if (event.type === "status") {
-      setStatusLine(event.message);
-    }
+      if (event.type === "status") {
+        setStatusLine(event.message);
+      }
 
-    if (event.type === "thinking") {
-      setThinkingText((current) => `${current}${event.text}`);
-      setStatusLine("模型正在强思考，思考过程会持续显示。");
-    }
+      if (event.type === "thinking") {
+        setThinkingText((current) => `${current}${event.text}`);
+        setStatusLine("模型正在强思考，思考过程会持续显示。");
+      }
 
-    if (event.type === "delta" || event.type === "content") {
-      setAnswer((current) => `${current}${event.text}`);
-    }
+      if (event.type === "delta" || event.type === "content") {
+        setAnswer((current) => `${current}${event.text}`);
+      }
 
-    if (event.type === "result") {
-      setAnswer(event.text);
-      setActiveIntent(event.intent);
-      setContextLine(formatAssistantContextStats(event.contextStats));
-      setStatusLine(event.fallbackUsed ? "已返回本地规则版建议。" : "超级助手已完成。");
-    }
+      if (event.type === "result") {
+        setAnswer(event.text);
+        setActiveIntent(event.intent);
+        setContextLine(formatAssistantContextStats(event.contextStats));
+        setStatusLine(
+          event.fallbackUsed ? "已返回本地规则版建议。" : "超级助手已完成。",
+        );
+        setDialogMessages([
+          ...requestContext.history,
+          { role: "user", content: requestContext.rawInput },
+          { role: "assistant", content: event.text },
+        ]);
+        requestContext.onResult?.();
+      }
 
-    if (event.type === "route") {
-      setStatusLine(event.message);
-      setContextLine("");
-      setThinkingText("");
-      setTaskGatePayload({
-        requestKey: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        rawTask: rawInput,
-        project: "Personal SaaS OS",
-        currentPhaseContext:
-          "Personal OS Coach 判断这是任务准入问题，交给 task gate 子模块处理。",
-      });
-    }
+      if (event.type === "route") {
+        setStatusLine(event.message);
+        setContextLine("");
+        setThinkingText("");
+        setTaskGatePayload({
+          requestKey: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          rawTask: requestContext.rawInput,
+          project: "Personal SaaS OS",
+          currentPhaseContext:
+            "Personal OS Coach 判断这是任务准入问题，交给 task gate 子模块处理。",
+        });
+      }
 
-    if (event.type === "error") {
-      setError(event.message);
-    }
-  }, []);
+      if (event.type === "error") {
+        setError(event.message);
+      }
+    },
+    [],
+  );
 
   const runAssistant = useCallback(
     async ({
+      history,
       mode,
+      onResult,
       rawInput,
     }: {
+      history?: AssistantDialogMessage[];
       mode?: AssistantStreamIntent;
+      onResult?: () => void;
       rawInput: string;
     }) => {
       const trimmed = rawInput.trim();
@@ -139,6 +169,13 @@ export function PersonalCoach({
         setError("先输入一个问题、想法或任务，再交给超级助手。");
         return;
       }
+
+      const historyForRequest = history ?? dialogMessages;
+      const requestContext: AssistantRequestContext = {
+        rawInput: trimmed,
+        history: historyForRequest,
+        onResult,
+      };
 
       requestSeqRef.current += 1;
       const requestSeq = requestSeqRef.current;
@@ -160,6 +197,7 @@ export function PersonalCoach({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            dialogMessages: historyForRequest,
             rawInput: trimmed,
             mode,
           }),
@@ -194,14 +232,14 @@ export function PersonalCoach({
           buffer = frames.remainder;
 
           for (const frame of frames.complete) {
-            handleStreamEvent(parseSseFrame(frame), trimmed);
+            handleStreamEvent(parseSseFrame(frame), requestContext);
           }
         }
 
         buffer += decoder.decode();
 
         if (buffer.trim() && requestSeqRef.current === requestSeq) {
-          handleStreamEvent(parseSseFrame(buffer), trimmed);
+          handleStreamEvent(parseSseFrame(buffer), requestContext);
         }
       } catch (streamError) {
         if (requestSeqRef.current !== requestSeq) {
@@ -223,12 +261,20 @@ export function PersonalCoach({
         }
       }
     },
-    [handleStreamEvent],
+    [dialogMessages, handleStreamEvent],
   );
 
   function submitQuestion(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void runAssistant({ rawInput: input });
+  }
+
+  function submitFollowup(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void runAssistant({
+      rawInput: followupInput,
+      onResult: () => setFollowupInput(""),
+    });
   }
 
   function runQuickAction(action: CoachQuickAction) {
@@ -250,6 +296,21 @@ export function PersonalCoach({
     abortRef.current?.abort();
     setIsStreaming(false);
     setStatusLine("已停止本次请求，输入没有丢失。");
+  }
+
+  function resetConversation() {
+    requestSeqRef.current += 1;
+    abortRef.current?.abort();
+    setInput("");
+    setFollowupInput("");
+    setDialogMessages([]);
+    setAnswer("");
+    setThinkingText("");
+    setContextLine("");
+    setError("");
+    setIsStreaming(false);
+    setActiveIntent("quick_answer");
+    setStatusLine("等待你的问题。");
   }
 
   return (
@@ -331,6 +392,15 @@ export function PersonalCoach({
           <span className="font-mono text-xs text-zinc-500">
             intent: {activeIntent}
           </span>
+          {dialogMessages.length > 0 ? (
+            <button
+              className={secondaryButtonClassName}
+              type="button"
+              onClick={resetConversation}
+            >
+              新对话
+            </button>
+          ) : null}
         </div>
       </form>
 
@@ -370,9 +440,44 @@ export function PersonalCoach({
       ) : null}
 
       {answer ? (
-        <article className="whitespace-pre-wrap border border-zinc-800 bg-zinc-950/70 p-4 text-sm leading-7 text-zinc-100">
-          {answer}
-        </article>
+        <section className="grid gap-3">
+          <article className="whitespace-pre-wrap border border-zinc-800 bg-zinc-950/70 p-4 text-sm leading-7 text-zinc-100">
+            {answer}
+          </article>
+
+          <form
+            className="grid gap-3 border border-emerald-900/60 bg-emerald-950/10 p-3"
+            onSubmit={submitFollowup}
+          >
+            <label className="grid gap-1.5 text-sm text-zinc-400">
+              继续对话
+              <textarea
+                className="min-h-20 resize-y border border-zinc-800 bg-black px-3 py-2 text-base text-zinc-100 outline-none focus:border-emerald-500"
+                placeholder="继续补充一句，或直接问下一轮问题"
+                value={followupInput}
+                onChange={(event) => setFollowupInput(event.target.value)}
+              />
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className={primaryButtonClassName}
+                disabled={isStreaming}
+                type="submit"
+              >
+                {isStreaming ? "生成中…" : "发送下一轮"}
+              </button>
+              {isStreaming ? (
+                <button
+                  className={secondaryButtonClassName}
+                  type="button"
+                  onClick={stopRequest}
+                >
+                  停止
+                </button>
+              ) : null}
+            </div>
+          </form>
+        </section>
       ) : null}
 
       {taskGatePayload ? (
