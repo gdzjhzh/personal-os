@@ -22,6 +22,8 @@ export function eventStream<TEvent extends StreamEvent>(
   let closed = false;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
+      controller.enqueue(encoder.encode(`: connected ${" ".repeat(2048)}\n\n`));
+
       function send<TType extends TEvent["type"]>(
         event: TType,
         data: Extract<TEvent, { type: TType }>,

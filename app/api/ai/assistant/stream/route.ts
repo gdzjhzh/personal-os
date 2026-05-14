@@ -71,6 +71,8 @@ export async function POST(request: Request) {
     let fallbackUsed = false;
     let finalText = "";
     let reasoningChars = 0;
+    let modelStartedStreaming = false;
+    let modelHeartbeat: ReturnType<typeof setInterval> | undefined;
 
     const abortDeepSeek = () => deepSeekAbort.abort();
     request.signal.addEventListener("abort", abortDeepSeek, { once: true });
@@ -120,6 +122,14 @@ export async function POST(request: Request) {
           dialogMessages: readDialogMessages(body.dialogMessages),
           todayCapacity: stringOrEmpty(body.todayCapacity),
         });
+        modelHeartbeat = setInterval(() => {
+          send("status", {
+            type: "status",
+            message: modelStartedStreaming
+              ? "模型仍在强思考并持续输出，请继续等待…"
+              : "后端已连接，正在等待模型开始输出思考…",
+          });
+        }, 3000);
 
         for await (const chunk of streamDeepSeekChatCompletion({
           messages,
@@ -132,6 +142,7 @@ export async function POST(request: Request) {
           signal: deepSeekAbort.signal,
         })) {
           if (chunk.type === "reasoning") {
+            modelStartedStreaming = true;
             reasoningChars += chunk.text.length;
             send("thinking", { type: "thinking", text: chunk.text });
             continue;
@@ -142,6 +153,7 @@ export async function POST(request: Request) {
           }
 
           finalText += chunk.text;
+          modelStartedStreaming = true;
           send("delta", { type: "delta", text: chunk.text });
         }
 
@@ -242,6 +254,9 @@ export async function POST(request: Request) {
           contextStats: contextPack.contextStats,
         });
       } finally {
+        if (modelHeartbeat) {
+          clearInterval(modelHeartbeat);
+        }
         request.signal.removeEventListener("abort", abortDeepSeek);
         streamSignal.removeEventListener("abort", abortDeepSeek);
         close();
