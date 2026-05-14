@@ -190,7 +190,7 @@ function fallbackPrefix(reason: string) {
   }
 
   if (reason === "timeout") {
-    return "模型响应超时，我先给你一个可执行的本地兜底结果。";
+    return "这次没有拿到完整模型结果，我先给你一个可执行的本地规则版建议。";
   }
 
   if (reason === "parse_error") {

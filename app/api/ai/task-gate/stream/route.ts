@@ -334,7 +334,7 @@ function fallbackStatusMessage(error: unknown) {
   }
 
   if (error instanceof DeepSeekTimeoutError) {
-    return "AI 任务准入响应超时，先给出保守判断，避免页面空白。";
+    return "AI 任务准入没有拿到完整模型结果，先给出保守判断，避免页面空白。";
   }
 
   if (error instanceof TaskGatekeeperError) {

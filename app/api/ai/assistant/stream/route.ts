@@ -272,7 +272,7 @@ function statusMessage(intent: PersonalCoachMode) {
   }
 
   if (intent === "plan_today") {
-    return "正在结合你的目标、任务和复盘生成今日计划…";
+    return "正在结合已记录的月目标/当前关注、任务和复盘生成今日计划…";
   }
 
   if (intent === "daily_review") {
@@ -296,10 +296,10 @@ function fallbackStatusMessage(reason: ReturnType<typeof fallbackReasonFromError
   }
 
   if (reason === "timeout") {
-    return "模型响应超时，先返回可用的本地兜底结果。";
+    return "这次没有拿到完整模型结果，先返回可执行的本地规则版建议。";
   }
 
-  return "AI 请求暂时不可用，先返回可用的本地兜底结果。";
+  return "AI 请求暂时不可用，先返回可用的本地规则版建议。";
 }
 
 function hasUsefulPartial(text: string): boolean {
@@ -312,7 +312,7 @@ function finalizePartialText(text: string): string {
     return trimmed;
   }
 
-  return `${trimmed}\n\n（模型响应超时，已保留当前流式内容。你可以先按上面的建议执行，或继续追问补全。）`;
+  return `${trimmed}\n\n（模型没有完整收尾，已保留当前流式内容。你可以先按上面的建议执行，或继续追问补全。）`;
 }
 
 function fallbackReasonFromError(

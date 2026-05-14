@@ -88,6 +88,57 @@ describe("assistant stream route", () => {
     );
     expect(events.at(-1)).toEqual({ type: "done", ok: true });
   });
+
+  it("uses explicit context wording for today planning", async () => {
+    const events = await postAssistant({
+      rawInput: "今天先做什么",
+      mode: "plan_today",
+    });
+    const statuses = events
+      .filter((event): event is Extract<AssistantStreamEvent, { type: "status" }> =>
+        event.type === "status",
+      )
+      .map((event) => event.message);
+
+    expect(statuses).toContain(
+      "正在结合已记录的月目标/当前关注、任务和复盘生成今日计划…",
+    );
+    expect(statuses.join(" ")).not.toContain("你的目标");
+  });
+
+  it("does not describe a local fallback as a user-facing timeout", async () => {
+    mocks.streamImpl.mockImplementation(async function* () {
+      throw new DeepSeekTimeoutError(16000);
+    });
+
+    const events = await postAssistant({
+      rawInput: "今天先做什么",
+      mode: "plan_today",
+    });
+    const result = events.find(
+      (event): event is Extract<AssistantStreamEvent, { type: "result" }> =>
+        event.type === "result",
+    );
+    const visibleText = events
+      .filter(
+        (
+          event,
+        ): event is Extract<
+          AssistantStreamEvent,
+          { type: "status" } | { type: "content" } | { type: "result" }
+        > =>
+          event.type === "status" ||
+          event.type === "content" ||
+          event.type === "result",
+      )
+      .map((event) => ("message" in event ? event.message : event.text))
+      .join("\n");
+
+    expect(result?.fallbackUsed).toBe(true);
+    expect(visibleText).toContain("完整模型结果");
+    expect(visibleText).not.toContain("模型响应超时");
+    expect(visibleText).not.toContain("响应超时");
+  });
 });
 
 async function postAssistant(body: Record<string, unknown>) {
