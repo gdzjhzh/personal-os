@@ -141,6 +141,27 @@ describe("assistant stream route", () => {
     expect(statuses.join(" ")).not.toContain("你的目标");
   });
 
+  it("exposes context source without leaking northStar wording to the model", async () => {
+    const events = await postAssistant({
+      rawInput: "小程序开发适合我吗",
+    });
+    const result = events.find(
+      (event): event is Extract<AssistantStreamEvent, { type: "result" }> =>
+        event.type === "result",
+    );
+    const request = mocks.streamImpl.mock.calls.at(-1)?.[0] as
+      | { messages?: Array<{ content: string }> }
+      | undefined;
+    const prompt = request?.messages?.at(-1)?.content || "";
+
+    expect(result?.contextSummary.longTermDirection).toBe(
+      "成为独立 SaaS 产品创建者",
+    );
+    expect(prompt).toContain('"longTermDirection": "成为独立 SaaS 产品创建者"');
+    expect(prompt).not.toContain("northStar");
+    expect(prompt).not.toContain("北星");
+  });
+
   it("does not describe a local fallback as a user-facing timeout", async () => {
     mocks.streamImpl.mockImplementation(async function* () {
       throw new DeepSeekTimeoutError(16000);

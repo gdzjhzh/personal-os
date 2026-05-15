@@ -5,6 +5,7 @@ import {
 import { buildAssistantFallback } from "@/lib/server/ai/assistantFallback";
 import {
   buildCoachContextPack,
+  summarizeCoachContextForAssistant,
   type CoachContextPack,
 } from "@/lib/server/ai/coachContext";
 import {
@@ -166,6 +167,7 @@ export async function POST(request: Request) {
           text: finalText,
           intent: resolvedIntent,
           contextStats: contextPack.contextStats,
+          contextSummary: summarizeCoachContextForAssistant(contextPack),
           fallbackUsed,
         });
         send("done", { type: "done", ok: true });
@@ -203,6 +205,7 @@ export async function POST(request: Request) {
             text: partialText,
             intent: toCoachMode(resolvedIntent),
             contextStats: contextPack.contextStats,
+            contextSummary: summarizeCoachContextForAssistant(contextPack),
             fallbackUsed: false,
           });
           send("done", { type: "done", ok: true });
@@ -239,6 +242,7 @@ export async function POST(request: Request) {
           text: fallback,
           intent: toCoachMode(resolvedIntent),
           contextStats: contextPack.contextStats,
+          contextSummary: summarizeCoachContextForAssistant(contextPack),
           fallbackUsed,
         });
         send("done", { type: "done", ok: true });

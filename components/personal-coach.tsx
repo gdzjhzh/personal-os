@@ -8,6 +8,7 @@ import {
 } from "@/components/task-gate-dialog";
 import type { DeepSeekModelInfo } from "@/lib/server/ai/deepseek";
 import type {
+  AssistantContextSummary,
   AssistantContextStats,
   AssistantStreamEvent,
   AssistantStreamIntent,
@@ -119,7 +120,12 @@ export function PersonalCoach({
       if (event.type === "result") {
         setAnswer(event.text);
         setActiveIntent(event.intent);
-        setContextLine(formatAssistantContextStats(event.contextStats));
+        setContextLine(
+          formatAssistantContextSource(
+            event.contextStats,
+            event.contextSummary,
+          ),
+        );
         setStatusLine(
           event.fallbackUsed ? "已返回本地规则版建议。" : "超级助手已完成。",
         );
@@ -522,15 +528,31 @@ function parseSseFrame(frame: string): SseFrame {
   };
 }
 
-function formatAssistantContextStats(stats: AssistantContextStats) {
+function formatAssistantContextSource(
+  stats: AssistantContextStats,
+  summary: AssistantContextSummary,
+) {
   const goalSource =
     stats.monthlyGoalCount > 0
       ? `月目标 ${stats.monthlyGoalCount} 条`
       : "月目标未设置，使用当前关注/活动任务";
   const reviewCount =
     stats.recentReviewCount + stats.recentAiDailyReviewCount;
+  const localContext = [
+    summary.longTermDirection
+      ? `长期方向：${summary.longTermDirection}`
+      : "",
+    summary.currentFocus ? `当前关注：${summary.currentFocus}` : "",
+    summary.currentMonthGoalTitle ? `当前月目标：${summary.currentMonthGoalTitle}` : "",
+    summary.currentWeekMilestone
+      ? `本周交付：${summary.currentWeekMilestone}`
+      : "",
+    summary.activeTaskCodes.length > 0
+      ? `活动任务：${summary.activeTaskCodes.join("、")}`
+      : "",
+  ].filter(Boolean);
 
-  return `上下文来源：${goalSource} · 活动任务 ${stats.activeTaskCount} 条 · 复盘 ${reviewCount} 条 · 学习记录 ${stats.recentLearningLogCount} 条 · 证据 ${stats.recentEvidenceCount} 条`;
+  return `上下文来源：本地执行上下文（${localContext.join("；") || "未设置长期方向和当前关注"}） · ${goalSource} · 活动任务 ${stats.activeTaskCount} 条 · 复盘 ${reviewCount} 条 · 学习记录 ${stats.recentLearningLogCount} 条 · 证据 ${stats.recentEvidenceCount} 条`;
 }
 
 const primaryButtonClassName =

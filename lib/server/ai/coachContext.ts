@@ -5,6 +5,7 @@ import {
 } from "@/lib/server/ai/knowledgeRetrieval";
 import type {
   AiDailyReview,
+  AssistantContextSummary,
   DailyReview,
   Evidence,
   LearningLog,
@@ -183,6 +184,24 @@ export function buildCoachContextPack(
       relevantKnowledgeSnippetCount: relevantKnowledgeSnippets.length,
       recentEvidenceCount: recentEvidence.length,
     },
+  };
+}
+
+export function summarizeCoachContextForAssistant(
+  context: CoachContextPack,
+): AssistantContextSummary {
+  return {
+    longTermDirection: context.operatingContext.northStar,
+    currentFocus: context.operatingContext.currentFocus,
+    currentMonthGoalTitle: context.currentMonthGoal?.title || "",
+    currentWeekMilestone:
+      context.currentWeekMilestone?.mustShip ||
+      context.currentWeekMilestone?.outcome ||
+      "",
+    activeTaskCodes: context.activeTasks
+      .slice(0, 5)
+      .map((task) => task.code)
+      .filter(Boolean),
   };
 }
 

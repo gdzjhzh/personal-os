@@ -587,6 +587,14 @@ export type AssistantContextStats = {
   recentEvidenceCount: number;
 };
 
+export type AssistantContextSummary = {
+  longTermDirection: string;
+  currentFocus: string;
+  currentMonthGoalTitle: string;
+  currentWeekMilestone: string;
+  activeTaskCodes: string[];
+};
+
 export type AssistantStreamEvent =
   | { type: "status"; message: string }
   | {
@@ -603,6 +611,7 @@ export type AssistantStreamEvent =
       text: string;
       intent: Exclude<AssistantStreamIntent, "task_gate">;
       contextStats: AssistantContextStats;
+      contextSummary: AssistantContextSummary;
       fallbackUsed: boolean;
     }
   | { type: "error"; message: string; code?: string }
