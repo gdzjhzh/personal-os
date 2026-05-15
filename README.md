@@ -12,14 +12,10 @@ npm run dev
 Open:
 
 ```text
-http://localhost:3000/today
+http://127.0.0.1:18000/today
 ```
 
-If Windows blocks port 3000, use another port:
-
-```bash
-npm run dev -- --port 3121
-```
+The local dev port is fixed to `18000` to avoid Windows refusing the default Next.js port.
 
 ## Storage
 
