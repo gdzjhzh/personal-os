@@ -20,14 +20,17 @@ import {
 } from "@/lib/server/ai/weeklyReviewCoach";
 import { chooseTodayP0 } from "@/lib/server/scoring";
 import {
+  archiveMonthlyGoal,
   createAiDailyReview,
   createAiWeeklyReview,
+  createMonthlyGoal,
   createTask,
   createReview,
   deleteTask,
   exportDailyMarkdown,
   readStore,
   TASK_STATUSES,
+  updateOperatingContext,
   updateTask,
 } from "@/lib/server/store";
 import type {
@@ -35,6 +38,9 @@ import type {
   AiWeeklyReview,
   CodexFit,
   DailyReview,
+  MonthlyGoal,
+  MonthlyGoalStatus,
+  OperatingContext,
   Task,
   TaskPriority,
   TaskQuadrant,
@@ -53,10 +59,11 @@ type TodayPageProps = {
     created?: string;
     deleted?: string;
     exported?: string;
+    profile?: string;
   }>;
 };
 
-type TodayView = "tasks" | "review" | "new-task";
+type TodayView = "tasks" | "review" | "new-task" | "profile";
 
 const priorities: TaskPriority[] = ["P0", "P1", "P2"];
 const manualTaskStatuses: TaskStatus[] = [
@@ -67,6 +74,20 @@ const manualTaskStatuses: TaskStatus[] = [
   "frozen",
 ];
 const codexFits: CodexFit[] = ["high", "medium", "low", "none"];
+
+const viewTitles: Record<TodayView, string> = {
+  tasks: "今日任务",
+  review: "今日复盘",
+  "new-task": "AI 任务准入",
+  profile: "个人信息",
+};
+
+const monthlyGoalStatusLabels: Record<MonthlyGoalStatus, string> = {
+  active: "进行中",
+  done: "已完成",
+  paused: "暂停",
+  archived: "已归档",
+};
 
 const legacyTodayStatuses: TaskStatus[] = [
   "active",
@@ -167,7 +188,7 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
                 Personal SaaS OS
               </p>
               <h1 className="mt-1 text-2xl font-semibold text-zinc-50 sm:text-3xl">
-                {view === "tasks" ? "今日任务" : view === "review" ? "今日复盘" : "AI 任务准入"}
+                {viewTitles[view]}
               </h1>
             </div>
             <div className="text-sm leading-6 text-zinc-500 md:text-right">
@@ -207,6 +228,14 @@ export default async function TodayPage({ searchParams }: TodayPageProps) {
 
           {view === "new-task" ? (
             <NewTaskView aiModelInfo={aiModelInfo} today={today} />
+          ) : null}
+
+          {view === "profile" ? (
+            <ProfileView
+              currentMonth={today.slice(0, 7)}
+              monthlyGoals={store.monthlyGoals || []}
+              operatingContext={store.operatingContext}
+            />
           ) : null}
         </div>
       </div>
@@ -262,6 +291,236 @@ function NewTaskView({
       <AiTaskClarifier modelInfo={aiModelInfo} />
       <ManualTaskSection today={today} />
     </div>
+  );
+}
+
+function ProfileView({
+  currentMonth,
+  monthlyGoals,
+  operatingContext,
+}: {
+  currentMonth: string;
+  monthlyGoals: MonthlyGoal[];
+  operatingContext: OperatingContext;
+}) {
+  const sortedGoals = [...monthlyGoals].sort(
+    (a, b) =>
+      b.month.localeCompare(a.month) || b.updatedAt.localeCompare(a.updatedAt),
+  );
+  const currentGoal = sortedGoals.find(
+    (goal) => goal.month === currentMonth && goal.status !== "archived",
+  );
+
+  return (
+    <div className="grid gap-4">
+      <section className="grid gap-4 border border-zinc-800 bg-black/80 p-4">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid gap-1">
+            <SectionTitle title="长期愿景" />
+            <p className="text-sm text-zinc-500">
+              这组信息会进入 AI 问答、任务准入和复盘的固定上下文。
+            </p>
+          </div>
+          <span className="font-mono text-xs text-zinc-600">
+            更新：{formatCreatedAt(operatingContext.updatedAt)}
+          </span>
+        </div>
+
+        <form action={updateOperatingContextAction} className="grid gap-4">
+          <div className="grid gap-3 lg:grid-cols-2">
+            <Field label="长期愿景">
+              <textarea
+                className={textareaClassName}
+                defaultValue={operatingContext.northStar}
+                name="northStar"
+                placeholder="例如：持续交付可收费的独立 SaaS 产品"
+                required
+              />
+            </Field>
+            <Field label="当前关注">
+              <textarea
+                className={textareaClassName}
+                defaultValue={operatingContext.currentFocus}
+                name="currentFocus"
+                placeholder="例如：本月只围绕一个最小闭环推进"
+                required
+              />
+            </Field>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-3">
+            <Field label="当前约束">
+              <textarea
+                className={textareaClassName}
+                defaultValue={listToTextarea(operatingContext.activeConstraints)}
+                name="activeConstraints"
+                placeholder="每行一个约束"
+              />
+            </Field>
+            <Field label="反目标">
+              <textarea
+                className={textareaClassName}
+                defaultValue={listToTextarea(operatingContext.antiGoals)}
+                name="antiGoals"
+                placeholder="每行一个不做的事"
+              />
+            </Field>
+            <Field label="执行原则">
+              <textarea
+                className={textareaClassName}
+                defaultValue={listToTextarea(operatingContext.principles)}
+                name="principles"
+                placeholder="每行一个判断原则"
+              />
+            </Field>
+          </div>
+
+          <div className="flex justify-end">
+            <button className={primaryButtonClassName} type="submit">
+              保存个人信息
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="grid gap-4 border border-zinc-800 bg-zinc-950/70 p-4">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+          <div className="grid gap-1">
+            <SectionTitle title="月度目标" />
+            <p className="text-sm text-zinc-500">
+              当前月份：{currentMonth}
+              {currentGoal ? ` · ${currentGoal.title}` : " · 尚未设置目标"}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
+          <div className="grid content-start gap-3">
+            {sortedGoals.length > 0 ? (
+              sortedGoals.map((goal) => (
+                <MonthlyGoalCard goal={goal} key={goal.id} />
+              ))
+            ) : (
+              <EmptyState>还没有月度目标。</EmptyState>
+            )}
+          </div>
+
+          <form
+            action={createMonthlyGoalAction}
+            className="grid content-start gap-3 border border-zinc-900 bg-black/70 p-3"
+          >
+            <h3 className="text-sm font-semibold text-zinc-200">
+              新增月度目标
+            </h3>
+            <Field label="月份">
+              <input
+                className={inputClassName}
+                defaultValue={currentMonth}
+                name="month"
+                required
+                type="month"
+              />
+            </Field>
+            <Field label="目标标题">
+              <input
+                className={inputClassName}
+                name="title"
+                placeholder="例如：完成小程序 SaaS 产品拆解"
+                required
+              />
+            </Field>
+            <Field label="为什么重要">
+              <textarea
+                className={textareaClassName}
+                name="why"
+                placeholder="这个目标和长期愿景的关系"
+                required
+              />
+            </Field>
+            <Field label="完成标准">
+              <textarea
+                className={textareaClassName}
+                name="successMetric"
+                placeholder="月底能检查的结果"
+                required
+              />
+            </Field>
+            <Field label="交付证据">
+              <textarea
+                className={textareaClassName}
+                name="targetEvidence"
+                placeholder="每行一个证据，例如 commit、页面、文档、产品卡片"
+              />
+            </Field>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <Field label="本月约束">
+                <textarea
+                  className={textareaClassName}
+                  name="constraints"
+                  placeholder="每行一个约束"
+                />
+              </Field>
+              <Field label="本月反目标">
+                <textarea
+                  className={textareaClassName}
+                  name="antiGoals"
+                  placeholder="每行一个不做的事"
+                />
+              </Field>
+            </div>
+            <button className={primaryButtonClassName} type="submit">
+              新增月度目标
+            </button>
+          </form>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function MonthlyGoalCard({ goal }: { goal: MonthlyGoal }) {
+  const isArchived = goal.status === "archived";
+
+  return (
+    <article
+      className={`grid gap-3 border border-zinc-900 bg-black/80 p-3 text-sm ${
+        isArchived ? "opacity-60" : ""
+      }`}
+    >
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <div className="font-mono text-xs text-emerald-400">
+            {goal.month}
+          </div>
+          <h3 className="mt-1 break-words text-base font-semibold text-zinc-100">
+            {goal.title}
+          </h3>
+        </div>
+        <span className="w-fit border border-zinc-800 px-2 py-1 text-xs text-zinc-300">
+          {monthlyGoalStatusLabels[goal.status]}
+        </span>
+      </div>
+
+      <dl className="grid gap-3 md:grid-cols-2">
+        <Detail label="为什么" value={goal.why || "未填写"} />
+        <Detail label="完成标准" value={goal.successMetric || "未填写"} />
+      </dl>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <ReviewList label="交付证据" items={goal.targetEvidence} />
+        <ReviewList label="约束" items={goal.constraints} />
+        <ReviewList label="反目标" items={goal.antiGoals} />
+      </div>
+
+      {!isArchived ? (
+        <form action={archiveMonthlyGoalAction} className="flex justify-end">
+          <input type="hidden" name="id" value={goal.id} />
+          <button className={secondaryButtonClassName} type="submit">
+            归档
+          </button>
+        </form>
+      ) : null}
+    </article>
   );
 }
 
@@ -393,6 +652,7 @@ function TodaySidebar({ activeView }: { activeView: TodayView }) {
     { view: "tasks", label: "今日任务", href: "/today?view=tasks" },
     { view: "review", label: "今日复盘", href: "/today?view=review" },
     { view: "new-task", label: "AI 任务准入", href: "/today?view=new-task" },
+    { view: "profile", label: "个人信息", href: "/today?view=profile" },
   ];
 
   return (
@@ -1275,6 +1535,63 @@ async function createTaskAction(formData: FormData) {
   redirect("/today?view=tasks&created=task");
 }
 
+async function updateOperatingContextAction(formData: FormData) {
+  "use server";
+
+  await updateOperatingContext({
+    northStar: getFormValue(formData, "northStar"),
+    currentFocus: getFormValue(formData, "currentFocus"),
+    activeConstraints: parseList(getFormValue(formData, "activeConstraints")),
+    antiGoals: parseList(getFormValue(formData, "antiGoals")),
+    principles: parseList(getFormValue(formData, "principles")),
+  });
+
+  revalidatePath("/today");
+  redirect("/today?view=profile&profile=context-saved");
+}
+
+async function createMonthlyGoalAction(formData: FormData) {
+  "use server";
+
+  const month = normalizeMonth(getFormValue(formData, "month"));
+  const title = getFormValue(formData, "title").trim();
+  const why = getFormValue(formData, "why").trim();
+  const successMetric = getFormValue(formData, "successMetric").trim();
+
+  if (!month || !title || !why || !successMetric) {
+    return;
+  }
+
+  await createMonthlyGoal({
+    month,
+    title,
+    why,
+    successMetric,
+    targetEvidence: parseList(getFormValue(formData, "targetEvidence")),
+    weeklyMilestones: [],
+    constraints: parseList(getFormValue(formData, "constraints")),
+    antiGoals: parseList(getFormValue(formData, "antiGoals")),
+    status: "active",
+  });
+
+  revalidatePath("/today");
+  redirect("/today?view=profile&profile=goal-created");
+}
+
+async function archiveMonthlyGoalAction(formData: FormData) {
+  "use server";
+
+  const id = getFormValue(formData, "id");
+
+  if (!id) {
+    return;
+  }
+
+  await archiveMonthlyGoal(id);
+  revalidatePath("/today");
+  redirect("/today?view=profile&profile=goal-archived");
+}
+
 async function createReviewAction(formData: FormData) {
   "use server";
 
@@ -1438,6 +1755,7 @@ function getNotices(params?: {
   created?: string;
   deleted?: string;
   exported?: string;
+  profile?: string;
 }) {
   const notices: string[] = [];
 
@@ -1459,6 +1777,18 @@ function getNotices(params?: {
 
   if (params?.review === "saved") {
     notices.push("每日复盘已保存。");
+  }
+
+  if (params?.profile === "context-saved") {
+    notices.push("个人信息已保存。");
+  }
+
+  if (params?.profile === "goal-created") {
+    notices.push("月度目标已新增。");
+  }
+
+  if (params?.profile === "goal-archived") {
+    notices.push("月度目标已归档。");
   }
 
   if (params?.aiReview === "daily-saved") {
@@ -1518,11 +1848,15 @@ function redirectAiReviewError(error: unknown): never {
 }
 
 function parseView(value?: string): TodayView {
-  if (value === "review" || value === "new-task") {
+  if (value === "review" || value === "new-task" || value === "profile") {
     return value;
   }
 
   return "tasks";
+}
+
+function normalizeMonth(value: string) {
+  return /^\d{4}-\d{2}$/.test(value) ? value : "";
 }
 
 function parsePriority(value: string): TaskPriority {
@@ -1611,6 +1945,10 @@ function parseList(value: string) {
     .split(/[,，、\n]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function listToTextarea(items: string[]) {
+  return items.join("\n");
 }
 
 function latestByCreatedAt<T extends { createdAt: string }>(items: T[]) {

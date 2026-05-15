@@ -206,6 +206,33 @@ export async function createAiWeeklyReview(input: CreateAiWeeklyReviewInput) {
   return review;
 }
 
+export async function updateOperatingContext(
+  patch: Partial<Omit<OperatingContext, "updatedAt">>,
+) {
+  const store = await readStore();
+  const now = new Date().toISOString();
+  const current = normalizeOperatingContext(store.operatingContext, now);
+  const next: OperatingContext = {
+    ...current,
+    northStar: patch.northStar?.trim() || current.northStar,
+    currentFocus: patch.currentFocus?.trim() || current.currentFocus,
+    activeConstraints: Array.isArray(patch.activeConstraints)
+      ? cleanStringArray(patch.activeConstraints)
+      : current.activeConstraints,
+    antiGoals: Array.isArray(patch.antiGoals)
+      ? cleanStringArray(patch.antiGoals)
+      : current.antiGoals,
+    principles: Array.isArray(patch.principles)
+      ? cleanStringArray(patch.principles)
+      : current.principles,
+    updatedAt: now,
+  };
+
+  store.operatingContext = next;
+  await writeStore(store);
+  return next;
+}
+
 export async function createMonthlyGoal(input: CreateMonthlyGoalInput) {
   const store = await readStore();
   const now = new Date().toISOString();
