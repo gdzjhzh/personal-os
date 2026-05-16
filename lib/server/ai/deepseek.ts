@@ -293,6 +293,7 @@ export async function* streamDeepSeekChatCompletion({
       : {}),
     ...(maxTokens ? { max_tokens: maxTokens } : {}),
     stream: true,
+    stream_options: { include_usage: true },
   });
   const controller = new AbortController();
   let deadlineExpired = false;

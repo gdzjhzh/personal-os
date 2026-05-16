@@ -152,7 +152,7 @@ describe("assistant stream route", () => {
     const request = mocks.streamImpl.mock.calls.at(-1)?.[0] as
       | { messages?: Array<{ content: string }> }
       | undefined;
-    const prompt = request?.messages?.at(-1)?.content || "";
+    const prompt = request?.messages?.map((message) => message.content).join("\n") || "";
 
     expect(result?.contextSummary.longTermDirection).toBe(
       "成为独立 SaaS 产品创建者",
@@ -160,6 +160,54 @@ describe("assistant stream route", () => {
     expect(prompt).toContain('"longTermDirection": "成为独立 SaaS 产品创建者"');
     expect(prompt).not.toContain("northStar");
     expect(prompt).not.toContain("北星");
+  });
+
+  it("keeps the local context as a stable prefix and reads cache usage", async () => {
+    mocks.streamImpl.mockImplementation(async function* () {
+      yield {
+        type: "usage",
+        usage: {
+          prompt_tokens: 120,
+          completion_tokens: 30,
+          total_tokens: 150,
+          prompt_cache_hit_tokens: 80,
+          prompt_cache_miss_tokens: 40,
+        },
+      };
+      yield { type: "content", text: "继续推进。" };
+    });
+
+    const events = await postAssistant({
+      rawInput: "下一步怎么做",
+      mode: "plan_today",
+      dialogMessages: [
+        { role: "user", content: "今天先做什么" },
+        { role: "assistant", content: "先确定今日 P0。" },
+      ],
+    });
+    const result = events.find(
+      (event): event is Extract<AssistantStreamEvent, { type: "result" }> =>
+        event.type === "result",
+    );
+    const request = mocks.streamImpl.mock.calls.at(-1)?.[0] as
+      | { messages?: Array<{ role: string; content: string }> }
+      | undefined;
+    const messages = request?.messages || [];
+
+    expect(messages[1]?.content).toContain("固定本地上下文包");
+    expect(messages[1]?.content).not.toContain("generatedAt");
+    expect(messages.at(-1)).toEqual({
+      role: "user",
+      content: "下一步怎么做",
+    });
+    expect(result?.cacheUsage).toEqual({
+      promptTokens: 120,
+      completionTokens: 30,
+      totalTokens: 150,
+      promptCacheHitTokens: 80,
+      promptCacheMissTokens: 40,
+      cacheHitRate: 67,
+    });
   });
 
   it("does not describe a local fallback as a user-facing timeout", async () => {

@@ -22,7 +22,7 @@ import {
   type PersonalCoachMode,
 } from "@/lib/server/ai/personalCoach";
 import { readStore } from "@/lib/server/store";
-import type { AssistantStreamEvent, Store } from "@/lib/types";
+import type { AssistantCacheUsage, AssistantStreamEvent, Store } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,6 +72,7 @@ export async function POST(request: Request) {
     let fallbackUsed = false;
     let finalText = "";
     let reasoningChars = 0;
+    let cacheUsage: AssistantCacheUsage | null = null;
     let modelStartedStreaming = false;
     let modelHeartbeat: ReturnType<typeof setInterval> | undefined;
 
@@ -149,6 +150,11 @@ export async function POST(request: Request) {
             continue;
           }
 
+          if (chunk.type === "usage") {
+            cacheUsage = readAssistantCacheUsage(chunk.usage);
+            continue;
+          }
+
           if (chunk.type !== "content") {
             continue;
           }
@@ -168,6 +174,7 @@ export async function POST(request: Request) {
           intent: resolvedIntent,
           contextStats: contextPack.contextStats,
           contextSummary: summarizeCoachContextForAssistant(contextPack),
+          cacheUsage,
           fallbackUsed,
         });
         send("done", { type: "done", ok: true });
@@ -206,6 +213,7 @@ export async function POST(request: Request) {
             intent: toCoachMode(resolvedIntent),
             contextStats: contextPack.contextStats,
             contextSummary: summarizeCoachContextForAssistant(contextPack),
+            cacheUsage,
             fallbackUsed: false,
           });
           send("done", { type: "done", ok: true });
@@ -243,6 +251,7 @@ export async function POST(request: Request) {
           intent: toCoachMode(resolvedIntent),
           contextStats: contextPack.contextStats,
           contextSummary: summarizeCoachContextForAssistant(contextPack),
+          cacheUsage,
           fallbackUsed,
         });
         send("done", { type: "done", ok: true });
@@ -378,6 +387,33 @@ function readDialogMessages(value: unknown) {
       Boolean(item),
     )
     .slice(-8);
+}
+
+function readAssistantCacheUsage(value: unknown): AssistantCacheUsage | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const promptTokens = readNumber(value.prompt_tokens);
+  const completionTokens = readNumber(value.completion_tokens);
+  const totalTokens = readNumber(value.total_tokens);
+  const promptCacheHitTokens = readNumber(value.prompt_cache_hit_tokens);
+  const promptCacheMissTokens = readNumber(value.prompt_cache_miss_tokens);
+  const cacheTotal = promptCacheHitTokens + promptCacheMissTokens;
+
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    promptCacheHitTokens,
+    promptCacheMissTokens,
+    cacheHitRate:
+      cacheTotal > 0 ? Math.round((promptCacheHitTokens / cacheTotal) * 100) : null,
+  };
+}
+
+function readNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function createEmptyStore(): Store {

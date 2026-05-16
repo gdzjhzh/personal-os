@@ -25,6 +25,10 @@ export function buildPersonalCoachMessages(
       role: "system",
       content: buildSystemPrompt(input.intent),
     },
+    {
+      role: "user",
+      content: buildContextPrompt(input),
+    },
   ];
 
   for (const message of input.dialogMessages?.slice(-8) || []) {
@@ -36,7 +40,7 @@ export function buildPersonalCoachMessages(
 
   messages.push({
     role: "user",
-    content: buildUserPrompt(input),
+    content: input.rawInput.trim() || "（用户没有输入具体问题）",
   });
 
   return messages;
@@ -53,7 +57,7 @@ function buildSystemPrompt(intent: PersonalCoachMode) {
 - 不要默认拒绝学习、研究、总结、复盘。只有当学习完全没有目标、输出物、应用对象时，才提醒用户收敛。
 - 学习类内容要尽量转成：一个可复述 insight、一个服务当前任务或本月目标的应用动作、一个可保存到知识库的卡片草稿。
 - 尽量让用户看见自己的积累和成就感，但不能编造事实；上下文不足时明确说“当前记录里没有足够信息”，然后给最低可行动建议。
-- 不要使用“北星”“北极星”“North Star”这类内部术语。引用 operating context 里的长期目标时，统一叫“长期方向”或“长期愿景”，并说明它来自本地执行上下文。
+- 不要用内部代号称呼长期目标。引用 operating context 里的长期目标时，统一叫“长期方向”或“长期愿景”，并说明它来自本地执行上下文。
 - 如果用户明确要新增任务、判断是否值得进入任务系统、任务准入，应该由 task gate 处理；你当前只处理 coach 模式。
 
 当前模式：${intent}
@@ -116,23 +120,22 @@ function modeInstructions(intent: PersonalCoachMode) {
 - 复盘时间。`;
 }
 
-function buildUserPrompt(input: PersonalCoachPromptInput) {
-  return `用户输入：
-${input.rawInput.trim() || "（用户没有输入具体问题）"}
+function buildContextPrompt(input: PersonalCoachPromptInput) {
+  return `固定本地上下文包：
+${JSON.stringify(compactContext(input.contextPack), null, 2)}
 
 今日可用容量：
 ${input.todayCapacity?.trim() || "未提供，请按保守容量安排。"}
 
-可用上下文包：
-${JSON.stringify(compactContext(input.contextPack), null, 2)}
-
-请按当前模式输出可直接执行的中文建议。`;
+使用规则：
+- 这条消息是可复用的本地上下文前缀，后续对话会尽量保持一致以提高 prompt cache 命中。
+- 回答时优先使用本地上下文和当前用户问题，不要编造未记录的事实。
+- 请按当前模式输出可直接执行的中文建议。`;
 }
 
 function compactContext(context: CoachContextPack) {
   return {
     today: context.today,
-    generatedAt: context.generatedAt,
     operatingContext: {
       longTermDirection: context.operatingContext.northStar,
       currentFocus: context.operatingContext.currentFocus,

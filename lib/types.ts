@@ -595,6 +595,15 @@ export type AssistantContextSummary = {
   activeTaskCodes: string[];
 };
 
+export type AssistantCacheUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  promptCacheHitTokens: number;
+  promptCacheMissTokens: number;
+  cacheHitRate: number | null;
+};
+
 export type AssistantStreamEvent =
   | { type: "status"; message: string }
   | {
@@ -612,6 +621,7 @@ export type AssistantStreamEvent =
       intent: Exclude<AssistantStreamIntent, "task_gate">;
       contextStats: AssistantContextStats;
       contextSummary: AssistantContextSummary;
+      cacheUsage: AssistantCacheUsage | null;
       fallbackUsed: boolean;
     }
   | { type: "error"; message: string; code?: string }

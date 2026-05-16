@@ -8,6 +8,7 @@ import {
 } from "@/components/task-gate-dialog";
 import type { DeepSeekModelInfo } from "@/lib/server/ai/deepseek";
 import type {
+  AssistantCacheUsage,
   AssistantContextSummary,
   AssistantContextStats,
   AssistantStreamEvent,
@@ -76,6 +77,7 @@ export function PersonalCoach({
   const [contextLine, setContextLine] = useState("");
   const [thinkingText, setThinkingText] = useState("");
   const [answer, setAnswer] = useState("");
+  const [cacheLine, setCacheLine] = useState("");
   const [followupInput, setFollowupInput] = useState("");
   const [dialogMessages, setDialogMessages] = useState<AssistantDialogMessage[]>(
     [],
@@ -126,6 +128,7 @@ export function PersonalCoach({
             event.contextSummary,
           ),
         );
+        setCacheLine(formatCacheUsage(event.cacheUsage));
         setStatusLine(
           event.fallbackUsed ? "已返回本地规则版建议。" : "超级助手已完成。",
         );
@@ -140,6 +143,7 @@ export function PersonalCoach({
       if (event.type === "route") {
         setStatusLine(event.message);
         setContextLine("");
+        setCacheLine("");
         setThinkingText("");
         setTaskGatePayload({
           requestKey: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -194,6 +198,7 @@ export function PersonalCoach({
       setAnswer("");
       setError("");
       setContextLine("");
+      setCacheLine("");
       setThinkingText("");
       setActiveIntent(mode || "quick_answer");
       setStatusLine("已发送，正在连接 Personal OS Coach…");
@@ -278,6 +283,7 @@ export function PersonalCoach({
   function submitFollowup(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void runAssistant({
+      mode: activeIntent === "task_gate" ? undefined : activeIntent,
       rawInput: followupInput,
       onResult: () => setFollowupInput(""),
     });
@@ -313,6 +319,7 @@ export function PersonalCoach({
     setAnswer("");
     setThinkingText("");
     setContextLine("");
+    setCacheLine("");
     setError("");
     setIsStreaming(false);
     setActiveIntent("quick_answer");
@@ -428,6 +435,9 @@ export function PersonalCoach({
         </div>
         {contextLine ? (
           <p className="text-xs leading-5 text-zinc-500">{contextLine}</p>
+        ) : null}
+        {cacheLine ? (
+          <p className="text-xs leading-5 text-zinc-500">{cacheLine}</p>
         ) : null}
         {error ? (
           <p className="border border-amber-900 bg-amber-950/25 px-3 py-2 leading-6 text-amber-100">
@@ -553,6 +563,17 @@ function formatAssistantContextSource(
   ].filter(Boolean);
 
   return `上下文来源：本地执行上下文（${localContext.join("；") || "未设置长期方向和当前关注"}） · ${goalSource} · 活动任务 ${stats.activeTaskCount} 条 · 复盘 ${reviewCount} 条 · 学习记录 ${stats.recentLearningLogCount} 条 · 证据 ${stats.recentEvidenceCount} 条`;
+}
+
+function formatCacheUsage(usage: AssistantCacheUsage | null) {
+  if (!usage) {
+    return "缓存：本次模型没有返回 usage，无法判断 cache hit。";
+  }
+
+  const hitRate =
+    usage.cacheHitRate === null ? "未知" : `${usage.cacheHitRate}%`;
+
+  return `缓存：hit ${usage.promptCacheHitTokens} tokens / miss ${usage.promptCacheMissTokens} tokens · 命中率 ${hitRate} · 输入 ${usage.promptTokens} tokens · 输出 ${usage.completionTokens} tokens`;
 }
 
 const primaryButtonClassName =
