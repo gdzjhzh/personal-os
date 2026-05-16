@@ -405,73 +405,91 @@ function ProfileView({
             )}
           </div>
 
-          <form
-            action={createMonthlyGoalAction}
-            className="grid content-start gap-3 border border-zinc-900 bg-black/70 p-3"
-          >
-            <h3 className="text-sm font-semibold text-zinc-200">
-              新增月度目标
-            </h3>
-            <Field label="月份">
-              <input
-                className={inputClassName}
-                defaultValue={currentMonth}
-                name="month"
-                required
-                type="month"
-              />
-            </Field>
-            <Field label="目标标题">
-              <input
-                className={inputClassName}
-                name="title"
-                placeholder="例如：完成小程序 SaaS 产品拆解"
-                required
-              />
-            </Field>
-            <Field label="为什么重要">
-              <textarea
-                className={textareaClassName}
-                name="why"
-                placeholder="这个目标和长期愿景的关系"
-                required
-              />
-            </Field>
-            <Field label="完成标准">
-              <textarea
-                className={textareaClassName}
-                name="successMetric"
-                placeholder="月底能检查的结果"
-                required
-              />
-            </Field>
-            <Field label="交付证据">
-              <textarea
-                className={textareaClassName}
-                name="targetEvidence"
-                placeholder="每行一个证据，例如 commit、页面、文档、产品卡片"
-              />
-            </Field>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <Field label="本月约束">
-                <textarea
-                  className={textareaClassName}
-                  name="constraints"
-                  placeholder="每行一个约束"
+          <details className="border border-zinc-900 bg-black/70">
+            <summary className="cursor-pointer list-none p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="grid gap-1">
+                  <h3 className="text-sm font-semibold text-zinc-200">
+                    新增月度目标
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    点击后填写月份、完成标准和交付证据。
+                  </p>
+                </div>
+                <span
+                  aria-hidden="true"
+                  className="border border-zinc-800 px-2 py-1 font-mono text-xs text-emerald-300"
+                >
+                  +
+                </span>
+              </div>
+            </summary>
+
+            <form
+              action={createMonthlyGoalAction}
+              className="grid content-start gap-3 border-t border-zinc-900 p-3"
+            >
+              <Field label="月份">
+                <input
+                  className={inputClassName}
+                  defaultValue={currentMonth}
+                  name="month"
+                  required
+                  type="month"
                 />
               </Field>
-              <Field label="本月反目标">
-                <textarea
-                  className={textareaClassName}
-                  name="antiGoals"
-                  placeholder="每行一个不做的事"
+              <Field label="目标标题">
+                <input
+                  className={inputClassName}
+                  name="title"
+                  placeholder="例如：完成小程序 SaaS 产品拆解"
+                  required
                 />
               </Field>
-            </div>
-            <button className={primaryButtonClassName} type="submit">
-              新增月度目标
-            </button>
-          </form>
+              <Field label="为什么重要">
+                <textarea
+                  className={textareaClassName}
+                  name="why"
+                  placeholder="这个目标和长期愿景的关系"
+                  required
+                />
+              </Field>
+              <Field label="完成标准">
+                <textarea
+                  className={textareaClassName}
+                  name="successMetric"
+                  placeholder="月底能检查的结果"
+                  required
+                />
+              </Field>
+              <Field label="交付证据">
+                <textarea
+                  className={textareaClassName}
+                  name="targetEvidence"
+                  placeholder="每行一个证据，例如 commit、页面、文档、产品卡片"
+                />
+              </Field>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <Field label="本月约束">
+                  <textarea
+                    className={textareaClassName}
+                    name="constraints"
+                    placeholder="每行一个约束"
+                  />
+                </Field>
+                <Field label="本月反目标">
+                  <textarea
+                    className={textareaClassName}
+                    name="antiGoals"
+                    placeholder="每行一个不做的事"
+                  />
+                </Field>
+              </div>
+              <button className={primaryButtonClassName} type="submit">
+                新增月度目标
+              </button>
+            </form>
+          </details>
         </div>
       </section>
     </div>
