@@ -394,7 +394,7 @@ function ProfileView({
           </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="grid gap-4">
           <div className="grid content-start gap-3">
             {sortedGoals.length > 0 ? (
               sortedGoals.map((goal) => (
